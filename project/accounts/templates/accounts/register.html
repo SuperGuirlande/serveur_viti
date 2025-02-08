@@ -1,0 +1,19 @@
+{% extends "main/base.html" %}
+{% load static %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{% static 'accounts/css/forms-style.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class='form-container'>
+  <h2 class="classic-title">S'inscrire</h2>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button class="primary-button" type="submit">Je m'inscris</button>
+    <p class="classic-p">Tu es déjà inscrit ?<br><a href="{% url 'login' %}">Tu peux te connecter ici →</a></p>
+  </form>
+</div>
+{% endblock %}
+

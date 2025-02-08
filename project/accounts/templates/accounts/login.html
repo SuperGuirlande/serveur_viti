@@ -1,0 +1,25 @@
+{% extends 'main/base.html' %}
+{% load static %}
+{% block extra_head %}
+<link rel="stylesheet" href="{% static 'accounts/css/forms-style.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class='form-container'>
+
+    <h1 class='classic-title'>Se Connecter</h1>
+    <form method='post'>
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button class='primary-button' type="submit">Se Connecter</button>
+        <p class="classic-p secondary">
+            Pas encore membre ? <br>
+            <a href="{% url 'register' %}">Créer un Compte ici →</a>
+        </p>
+        <p class="classic-p secondary">
+            Mot de passe perdu ? <br>
+            <a href="{% url 'password_reset' %}">Réinitialiser le mot de passe ici →</a>
+        </p>
+    </form>
+</div>
+{% endblock %}
