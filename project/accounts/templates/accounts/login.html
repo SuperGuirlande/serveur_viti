@@ -1,25 +1,72 @@
 {% extends 'main/base.html' %}
 {% load static %}
-{% block extra_head %}
-<link rel="stylesheet" href="{% static 'accounts/css/forms-style.css' %}">
-{% endblock %}
 
 {% block content %}
-<div class='form-container'>
+<section class="relative min-h-[80vh] bg-gradient-to-b from-green-900 to-green-700 flex flex-col items-center">
+    <!-- Overlay pattern -->
+    <div class="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0zNiAzNGM0LjQxOCAwIDgtMy41ODIgOC04cy0zLjU4Mi04LTgtOC04IDMuNTgyLTggOCAzLjU4MiA4IDggOHoiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii4xIi8+PC9nPjwvc3ZnPg==')] opacity-10"></div>
 
-    <h1 class='classic-title'>Se Connecter</h1>
-    <form method='post'>
-        {% csrf_token %}
-        {{ form.as_p }}
-        <button class='primary-button' type="submit">Se Connecter</button>
-        <p class="classic-p secondary">
-            Pas encore membre ? <br>
-            <a href="{% url 'register' %}">Créer un Compte ici →</a>
-        </p>
-        <p class="classic-p secondary">
-            Mot de passe perdu ? <br>
-            <a href="{% url 'password_reset' %}">Réinitialiser le mot de passe ici →</a>
-        </p>
-    </form>
-</div>
+    <div class="relative z-10 container mx-auto px-4 py-16">
+        <div class="max-w-md mx-auto bg-white rounded-lg shadow-xl p-8">
+            <h1 class="text-3xl font-bold text-green-800 text-center mb-8">Se Connecter</h1>
+            
+            <form method="post" class="space-y-6">
+                {% csrf_token %}
+                <style>
+                    .form-input {
+                        width: 100%;
+                        padding: 0.75rem 1rem;
+                        border: 1px solid #d1d5db;
+                        border-radius: 0.375rem;
+                        margin-top: 0.5rem;
+                    }
+                    .form-input:focus {
+                        outline: none;
+                        border-color: #15803d;
+                        box-shadow: 0 0 0 2px rgba(21, 128, 61, 0.2);
+                    }
+                    .form-label {
+                        display: block;
+                        font-size: 0.875rem;
+                        font-weight: 500;
+                        color: #374151;
+                        margin-bottom: 0.5rem;
+                    }
+                    .error-message {
+                        color: #ef4444;
+                        font-size: 0.875rem;
+                        margin-top: 0.5rem;
+                    }
+                    form p {
+                        display: flex;
+                        flex-direction: column;
+                        gap: 12px
+                    }
+                </style>
+
+                {{ form.as_p }}
+
+                <button type="submit" class="w-full bg-green-800 text-white rounded-lg px-4 py-3 font-semibold hover:bg-green-700 transition-colors duration-200">
+                    Se Connecter
+                </button>
+
+                <div class="mt-6 space-y-4 text-center">
+                    <p class="text-gray-600">
+                        Mot de passe perdu ?
+                        <a href="{% url 'password_reset' %}" class="text-green-800 hover:text-green-700 font-medium">
+                            Réinitialiser le mot de passe ici →
+                        </a>
+                    </p>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Vague décorative en bas -->
+    <div class="absolute -bottom-1 left-0 right-0">
+        <svg class="w-full h-24 fill-white" viewBox="0 0 1440 74" xmlns="http://www.w3.org/2000/svg">
+            <path d="M0,32L60,37.3C120,43,240,53,360,53.3C480,53,600,43,720,42.7C840,43,960,53,1080,53.3C1200,53,1320,43,1380,37.3L1440,32L1440,74L1380,74C1320,74,1200,74,1080,74C960,74,840,74,720,74C600,74,480,74,360,74C240,74,120,74,60,74L0,74Z"></path>
+        </svg>
+    </div>
+</section>
 {% endblock %}

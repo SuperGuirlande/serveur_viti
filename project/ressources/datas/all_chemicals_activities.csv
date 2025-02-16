@@ -1179,7 +1179,8 @@ Livinston, Edinburgh."
 2-PHENYLETHYL-ISOTHIOCYANATE,Cancer-Preventive,not available,"Stitt, P. A. Why George Should Eat Broccoli. Dougherty Co, Milwaukee, WI, 1990, 399 pp."
 2-PHENYLETHYL-ISOTHIOCYANATE,Herbicide,not available,"Duke, 1992 *"
 2-PHENYLETHYL-ISOTHIOCYANATE,Insecticide,"IC100=5,000 ppm","Lydon, J. & Duke, S., The potential of pesticides from plants, pp. 1-41 in Craker, L. & Simon, J., eds, Herbs, Spices & Medicinal Plants: Recent Advances in Botany, Horticulture, & Pharmacology, v. 4, Oryx Press, Phoenix, 1989, 267pp."
-2-PHENYLETHYL-ISOTHIOCYANATE,Pesticide,not available,"Duke, 1992 *"2-PROPENE-1-SULFINOTHIOCIC-ACIDS-2-PROPENYL-ESTER,Antiseptic,not available,"Duke, 1992 *"
+2-PHENYLETHYL-ISOTHIOCYANATE,Pesticide,not available,"Duke, 1992 *"
+2-PROPENE-1-SULFINOTHIOCIC-ACIDS-2-PROPENYL-ESTER,Antiseptic,not available,"Duke, 1992 *"
 2-THIOURACIL,Antianginal,not available,Merck 11th Edition
 2-THIOURACIL,Antihyperthyroidic,not available,Merck 11th Edition
 2-THIOURACIL,Lipogenic,not available,Merck 11th Edition
@@ -6419,8 +6420,6 @@ BERBERASTINE,Vasoconstrictor,not available,"Duke, 1992 *"
 BERBERASTINE,Vasodilator,2 mg/kg cat,"Duke, 1992 *"
 BERBERASTINE,Vermifuge,not available,"Duke, 1992 *"
 BERBERASTINE,Vibriofuge,not available,"Duke, 1992 *"
-(+)-Inotropic,not available,"Mills, Simon and Bone, Kerry. 2000. Phytotherapy. Churchill
-Livinston, Edinburgh."
 BERBERINE-CHLORIDE,Aldose-Reductase-Inhibitor,IC100=14 nM,"Duke, 1992 *"
 BERBERINE-CHLORIDE,Antidiabetic,IC100=14 nM,"Duke, 1992 *"
 BERBERINE-CHLORIDE,Antileishmanic,EC50=1 ug/ml,"Mills, Simon and Bone, Kerry. 2000. Phytotherapy. Churchill
@@ -12684,7 +12683,7 @@ EMODIN,Antispasmodic,not available,"Williamson, E. M. and Evans, F. J., Potter's
 EMODIN,Antisprout,not available,"Duke, 1992 *"
 EMODIN,Antitumor (Breast),not available,"Duke, 1992 *"
 EMODIN,Antiulcer,15 mg/kg,"Duke, 1992 *"
-EMODIN,Antivaginitic,not available,"TIllotson, A. K. (with Abel, Jr., R., Tillotson, N.H., Bajracharya, V.M.B.). 2001. The One Earth Herbal Sourcebook: Everything You Need to Know about Chinese, Western, and Ayurvedic Herbal Treatments. Twin Streams, Kensington Publishing Corp. NY,NY. 596 pp"
+EMODIN,Antivaginitic,not available,"TIllotson, A. K. (with Abel, Jr., R., Tillotson, N.H., Bajracharya, V.M.B.)"
 EMODIN,Antiviral,ED50=1.1 ug/ml,"Duke, 1992 *"
 EMODIN,Antiviral,EC50=1.1,"Duke, 1992 *"
 EMODIN,Cathartic,not available,Merck 11th Edition
@@ -25928,11 +25927,11 @@ SIPANDINOLIDE,Antiplasmodial,IC50=46 ug/ml,"Rukunga, G. and Simons, A. J. 2006. 
 SIPHONODIN,Cytotoxic,not available,"Duke, 1992 *"
 SIPHONOSIDE,Cytotoxic,not available,"Duke, 1992 *"
 SITOINDOSIDE-IV,Antiulcerogenic,not available,"Duke, 1992 *"
-SITOINDOSIDE-IX,'Smart-Drug',50-200/kg mg orl rat,"Iwu, M.M. 1993. Handbook of African Medicinal Plants. CRC Press, Boca Raton, FL 435 pp."
+SITOINDOSIDE-IX,Smart-Drug,50-200/kg mg orl rat,"Iwu, M.M. 1993. Handbook of African Medicinal Plants. CRC Press, Boca Raton, FL 435 pp."
 SITOINDOSIDE-IX,Antistress,50-200/kg mg orl rat,"Iwu, M.M. 1993. Handbook of African Medicinal Plants. CRC Press, Boca Raton, FL 435 pp."
 SITOINDOSIDE-IX,Immunostimulant,100-400 ug/mus,"Iwu, M.M. 1993. Handbook of African Medicinal Plants. CRC Press, Boca Raton, FL 435 pp."
 SITOINDOSIDE-IX,Phagocytotic,100-400 ug/mus,"Iwu, M.M. 1993. Handbook of African Medicinal Plants. CRC Press, Boca Raton, FL 435 pp."
-SITOINDOSIDE-X,'Smart-Drug',50-200/kg mg orl rat,"Iwu, M.M. 1993. Handbook of African Medicinal Plants. CRC Press, Boca Raton, FL 435 pp."
+SITOINDOSIDE-X,Smart-Drug,50-200/kg mg orl rat,"Iwu, M.M. 1993. Handbook of African Medicinal Plants. CRC Press, Boca Raton, FL 435 pp."
 SITOINDOSIDE-X,Antistress,50-200/kg mg orl rat,"Iwu, M.M. 1993. Handbook of African Medicinal Plants. CRC Press, Boca Raton, FL 435 pp."
 SITOINDOSIDE-X,Immunostimulant,100-400 ug/mus,"Iwu, M.M. 1993. Handbook of African Medicinal Plants. CRC Press, Boca Raton, FL 435 pp."
 SITOINDOSIDE-X,Phagocytotic,100-400 ug/mus,"Iwu, M.M. 1993. Handbook of African Medicinal Plants. CRC Press, Boca Raton, FL 435 pp."
@@ -29702,11 +29701,11 @@ VANILLIN,Insectifuge?,not available,Martindale's 28th
 VANILLIN,Irritant,not available,"Duke, 1992 *"
 VANILLIN,Perfumery,not available,"Duke, 1992 *"
 VANILLIN,Pesticide,not available,"Duke, 1992 *"
-5-HETE-Inhibitor,not available,"Duke, 1992 *"
+VITAMIN-E,5-HETE-Inhibitor,not available,"Duke, 1992 *"
 VITAMIN-E,Allergenic,not available,"Duke, 1992 *"
 VITAMIN-E,Analgesic,100 IU 3 x day,"Werbach, M. 1993. Healing with Food. Harper Collins, New York, 443 pp."
 VITAMIN-E,Antiaggregant,not available,Martindale's 28th
-VITAMIN-E,Antiaging,VITAMIN-E,not available,"Challem, J., Berkson, Burt, and Smith, Melissa Dianne. 2000.
+VITAMIN-E,Antiaging,not available,"Challem, J., Berkson, Burt, and Smith, Melissa Dianne. 2000.
 Syndrome X - The complete nutritional program to prevent and reservse insulin resistance. John Wiley & Sons, New York. 272 pp. $24.95"
 VITAMIN-E,Antialzheimeran,"2,000 IU","Challem, J., Berkson, Burt, and Smith, Melissa Dianne. 2000.
 Syndrome X - The complete nutritional program to prevent and reservse insulin resistance. John Wiley & Sons, New York. 272 pp. $24.95"

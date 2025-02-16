@@ -1,0 +1,122 @@
+{% extends 'main/base.html' %}
+{% load metabolite_tags %}
+{% load static %}
+
+{% block content %}
+<!-- Hero Section -->
+<section class="relative min-h-[40vh] bg-gradient-to-b from-green-900 to-green-700 flex flex-col items-center">
+    <!-- Overlay pattern -->
+    <div class="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0zNiAzNGM0LjQxOCAwIDgtMy41ODIgOC04cy0zLjU4Mi04LTgtOC04IDMuNTgyLTggOCAzLjU4MiA4IDggOHoiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii4xIi8+PC9nPjwvc3ZnPg==')] opacity-10"></div>
+
+    <!-- Contenu du hero -->
+    <div class="relative z-10 container mx-auto px-4 h-full flex flex-col justify-center items-center py-12">
+        <h1 class="text-4xl md:text-5xl font-bold text-white mb-4">
+            Catalogue des Plantes
+        </h1>
+        <p class="text-lg text-gray-100 max-w-2xl text-center">
+            Découvrez notre collection complète de plantes et leurs métabolites associés
+        </p>
+    </div>
+
+    <!-- Vague décorative -->
+    <div class="absolute -bottom-1 left-0 right-0">
+        <svg class="w-full h-24 fill-white" viewBox="0 0 1440 74" xmlns="http://www.w3.org/2000/svg">
+            <path d="M0,32L60,37.3C120,43,240,53,360,53.3C480,53,600,43,720,42.7C840,43,960,53,1080,53.3C1200,53,1320,43,1380,37.3L1440,32L1440,74L1380,74C1320,74,1200,74,1080,74C960,74,840,74,720,74C600,74,480,74,360,74C240,74,120,74,60,74L0,74Z"></path>
+        </svg>
+    </div>
+</section>
+
+<section class='w-full flex flex-col justify-center py-12'>
+    <h1 class='text-4xl font-bold text-center text-green-600 mb-4'>
+        Rechercher une(des) plante(s)
+    </h1>
+    <form action="{% url 'plant_search' %}" method="get" class='flex flex-col w-full px-5 max-w-[450px] mx-auto'>
+        <input type="text" name="search" placeholder="Rechercher une plante" class="w-full p-2 mb-3 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500">
+        
+        <!-- Ajout des options de tri -->
+        <div class="flex flex-col gap-2 mb-3">
+            <label class="text-sm text-gray-600">Trier par :</label>
+            <select name="sort" class="w-full p-2 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500">
+                <option value="name_asc" {% if request.GET.sort == 'name_asc' %}selected{% endif %}>Nom (A-Z)</option>
+                <option value="name_desc" {% if request.GET.sort == 'name_desc' %}selected{% endif %}>Nom (Z-A)</option>
+                <option value="metabolites_asc" {% if request.GET.sort == 'metabolites_asc' %}selected{% endif %}>Nombre de métabolites (croissant)</option>
+                <option value="metabolites_desc" {% if request.GET.sort == 'metabolites_desc' %}selected{% endif %}>Nombre de métabolites (décroissant)</option>
+            </select>
+        </div>
+
+        <button type="submit" class="w-fit px-6 py-2 mt-2 mx-auto rounded-md bg-green-500 text-white hover:bg-green-600">Rechercher</button>
+    </form>
+</section>
+
+<!-- Section du tableau -->
+<section class="w-full max-w-[850px] mx-auto py-16">
+    <div class="container mx-auto px-4">
+        <h1 class='text-4xl font-bold text-center text-green-600 mb-4'>
+            Liste des plantes
+        </h1>
+        <div class="overflow-x-auto shadow-lg rounded-lg">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Nom de la plante
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Nombre de métabolites uniques
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Nombre de métabolites
+                        </th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for plant in plants %}
+                    <tr class="hover:bg-gray-50 cursor-pointer" onclick="window.location='{% url 'plant_detail' plant.id %}';">
+                        <td class="px-6 py-4 whitespace-normal text-sm text-gray-900">
+                            {{ plant.name }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                {{ plant.get_unique_metabolites_count }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                {{ plant.all_metabolites_count }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination stylisée -->
+        <div class="mt-6 flex justify-center">
+            <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                {% if plants.has_previous %}
+                    <a href="?page=1" class="relative inline-flex items-center px-4 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                        Première
+                    </a>
+                    <a href="?page={{ plants.previous_page_number }}" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                        Précédente
+                    </a>
+                {% endif %}
+
+                <span class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-green-600 text-sm font-medium text-white">
+                    Page {{ plants.number }} sur {{ plants.paginator.num_pages }}
+                </span>
+
+                {% if plants.has_next %}
+                    <a href="?page={{ plants.next_page_number }}" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                        Suivante
+                    </a>
+                    <a href="?page={{ plants.paginator.num_pages }}" class="relative inline-flex items-center px-4 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                        Dernière
+                    </a>
+                {% endif %}
+            </nav>
+        </div>
+    </div>
+</section>
+{% endblock %}

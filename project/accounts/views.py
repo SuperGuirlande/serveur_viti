@@ -7,17 +7,6 @@ from django.contrib.auth.forms import PasswordChangeForm
 from django.urls import reverse_lazy
 
 
-# S'enregistrer
-def register(request):
-    if request.method == 'POST':
-        form = UserRegisterForm(request.POST)
-        if form.is_valid():
-            form.save()
-            return redirect('login')
-    else:
-        form = UserRegisterForm()
-    return render(request, 'accounts/register.html', {'form': form})
-
 # Login
 def user_login(request):
     if request.method == 'POST':

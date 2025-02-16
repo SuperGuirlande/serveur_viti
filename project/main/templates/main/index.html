@@ -1,31 +1,66 @@
 {% extends 'main/base.html' %}
 {% load static %}
 
-{% block title %}Accueil - CodeMaster Shop{% endblock %}
+{% block title %}Accueil - Base de données interactive{% endblock %}
 
 {% block content %}
-<section class='w-full flex flex-col'>
-    <div class="container mx-auto">
-        <h1 class="text-blue-600 text-4xl font-extrabold text-center">Agriculteur 2.0</h1>
+<!-- Hero Section -->
+<section class="relative min-h-[80vh] bg-gradient-to-b from-green-900 to-green-700 flex flex-col items-center">
+    <!-- Overlay pattern -->
+    <div class="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0zNiAzNGM0LjQxOCAwIDgtMy41ODIgOC04cy0zLjU4Mi04LTgtOC04IDMuNTgyLTggOCAzLjU4MiA4IDggOHoiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii4xIi8+PC9nPjwvc3ZnPg==')] opacity-10"></div>
 
+    <!-- Image de fond avec overlay -->
+    <div class="absolute inset-0 mix-blend-overlay opacity-20">
+        <img src="{% static 'images/home-hero.jpg' %}" alt="Vignoble" class="w-full h-full object-cover">
+    </div>
+    
+    <!-- Contenu du hero -->
+    <div class="relative z-10 container mx-auto my-auto px-4 h-full flex flex-col justify-center items-center">
+        <div class="max-w-4xl text-center space-y-8">
+            <h1 class="text-4xl md:text-6xl font-extrabold text-white leading-tight">
+                <span class="block">Base de Données</span>
+                <span class="block text-green-300">Agricole Interactive</span>
+            </h1>
+            
+            <p class="text-lg md:text-xl text-gray-100 max-w-3xl mx-auto leading-relaxed">
+                Explorez notre base de données complète des plantes et leurs métabolites. 
+                Créez des tableaux croisés dynamiques pour analyser les relations entre les espèces végétales et leurs composés chimiques.
+            </p>
 
-        <h2 class="text-2xl font-bold text-center">Liste des métabolites</h2>
-
-        <div class="flex flex-col gap-4">
-            {% for metabolite in metabolites %}
-            <div class="flex justify-between items-center">
-                <p>{{ metabolite.name }}</p>
-                <p>{{ metabolite.is_ubiquitous }}</p>
-                <a href="{% url 'metabolite_detail' metabolite.id %}" class="bg-white p-4 rounded-lg shadow-md ">
-
-                    <h3 class="text-lg font-bold">Voir les détails →</h3>
+            <div class="flex flex-col sm:flex-row gap-4 justify-center mt-8 mx-auto">
+                <a href="{% url 'all_metabolites' %}" class="px-8 py-4 bg-white text-green-800 rounded-lg font-semibold hover:bg-green-50 transition-colors duration-200 shadow-lg hover:shadow-xl">
+                    Explorer les métabolites
                 </a>
+                <a href="{% url 'all_plants' %}" class="px-8 py-4 bg-white text-green-800 rounded-lg font-semibold hover:bg-green-50 transition-colors duration-200 shadow-lg hover:shadow-xl">
+                    Explorer les plantes
+                </a>
+    </div>
+
+            <!-- Stats -->
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-8 mt-16 mx-auto">
+                <div class="text-center">
+                    <div class="text-4xl font-bold text-white">{{ metabolites.count }}</div>
+                    <div class="text-green-300 mt-2">Métabolites</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-4xl font-bold text-white">{{ plants.count }}</div>
+                    <div class="text-green-300 mt-2">Plantes</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-4xl font-bold text-white">{{ activities.count }}</div>
+                    <div class="text-green-300 mt-2">Activités</div>
+                </div>
             </div>
-            {% endfor %}
         </div>
     </div>
 
-
+    <!-- Vague décorative en bas -->
+    <div class="absolute -bottom-1 left-0 right-0">
+        <svg class="w-full h-24 fill-white" viewBox="0 0 1440 74" xmlns="http://www.w3.org/2000/svg">
+            <path d="M0,32L60,37.3C120,43,240,53,360,53.3C480,53,600,43,720,42.7C840,43,960,53,1080,53.3C1200,53,1320,43,1380,37.3L1440,32L1440,74L1380,74C1320,74,1200,74,1080,74C960,74,840,74,720,74C600,74,480,74,360,74C240,74,120,74,60,74L0,74Z"></path>
+        </svg>
     </div>
 </section>
+
+
 {% endblock %}

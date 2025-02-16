@@ -1,3 +1,7 @@
 __pycache__/
 env/
 .env
+logs/
+migrations/
+static/
+db.sqlite3

@@ -1,10 +1,9 @@
 from django.urls import path
-from .views import change_password, register, user_login, user_logout, my_account
+from .views import change_password, user_login, user_logout, my_account
 from django.contrib.auth import views as auth_views
 
 
 urlpatterns = [
-    path('s-inscrire/', register, name='register'),
     path('se-connecter/', user_login, name='login'),
     path('se-deconnecter/', user_logout, name='logout'),
     path('mon-compte/', my_account, name='my_account'),
