@@ -1,0 +1,58 @@
+{% extends "main/base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8 max-w-4xl">
+    <!-- En-tête de l'activité -->
+    <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
+        <h1 class="text-3xl font-bold text-center text-gray-800 mb-4">
+            {{ activity.name }}
+        </h1>
+        <div class="flex gap-8 justify-center items-center py-5">
+            <div class="flex flex-col gap-2 text-center">
+                <span class="text-sm text-gray-500">Nombre de métabolites</span>
+                <span class="text-2xl font-bold">{{ activity.metaboliteactivity_set.count }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Section Métabolites -->
+    <div class="bg-white rounded-lg shadow-lg p-6">
+        <h2 class="text-2xl font-bold text-gray-800 mb-6 flex items-center">
+            <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+            </svg>
+            Métabolites associés
+        </h2>
+        <div class="overflow-x-auto">
+            <table class="min-w-full table-auto">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Métabolite</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dosage</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Référence</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for metabolite_activity in activity.metaboliteactivity_set.all %}
+                    <tr class="hover:bg-gray-50 cursor-pointer" onclick="window.location='{% url 'metabolite_detail' metabolite_activity.metabolite.id %}'">
+                        <td class="px-6 py-4 text-wrap text-sm font-medium text-gray-900">
+                            {{ metabolite_activity.metabolite.name }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ metabolite_activity.dosage }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-blue-600 hover:text-blue-800">
+                            {{ metabolite_activity.reference }}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="3" class="px-6 py-4 text-center text-gray-500 italic">Aucun métabolite enregistré</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %} 

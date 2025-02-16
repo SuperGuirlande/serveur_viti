@@ -155,3 +155,51 @@ def plant_detail(request, plant_id):
     }
     
     return render(request, 'metabolites/plant_detail.html', context)
+
+
+@login_required
+def all_activities(request):
+    # Récupération des paramètres
+    search = request.GET.get('search')
+    sort = request.GET.get('sort', 'name_asc')
+
+    # Requête de base avec annotations pour les comptages
+    activities_list = Activity.objects.annotate(
+        metabolites_count=Count('metaboliteactivity', distinct=True)
+    )
+
+    # Appliquer la recherche si nécessaire
+    if search:
+        activities_list = activities_list.filter(name__icontains=search)
+
+    # Appliquer le tri
+    if sort == 'name_asc':
+        activities_list = activities_list.order_by('name')
+    elif sort == 'name_desc':
+        activities_list = activities_list.order_by('-name')
+    elif sort == 'metabolites_asc':
+        activities_list = activities_list.order_by('metabolites_count')
+    elif sort == 'metabolites_desc':
+        activities_list = activities_list.order_by('-metabolites_count')
+
+    # Pagination
+    paginator = Paginator(activities_list, 100)
+    page_number = request.GET.get('page')
+    activities_list = paginator.get_page(page_number)
+    
+    context = {
+        'activities': activities_list,
+    }
+
+    return render(request, 'metabolites/all_activities.html', context)
+
+
+@login_required
+def activity_detail(request, activity_id):
+    activity = get_object_or_404(Activity, id=activity_id)
+    
+    context = {
+        'activity': activity,
+    }
+    
+    return render(request, 'metabolites/activity_detail.html', context)
