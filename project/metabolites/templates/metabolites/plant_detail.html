@@ -1,7 +1,7 @@
 {% extends "main/base.html" %}
 
 {% block content %}
-<div class="container mx-auto px-4 py-8 max-w-4xl">
+<div class="container mx-auto px-4 py-8 max-w-7xl">
     <!-- En-tête de la plante -->
     <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
         <h1 class="text-3xl font-bold text-center text-gray-800 mb-4">
@@ -41,17 +41,33 @@
                     <tr>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Métabolite</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Partie de la plante</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Concentration min (%)</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Concentration max (%)</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Écart-type</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Référence</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ubiquitaire</th>
                     </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
                     {% for metabolite in metabolites %}
-                    <tr class="hover:bg-gray-50 cursor-pointer" onclick="window.location='{% url 'metabolite_detail' metabolite.metabolite_id %}';">
+                    <tr class="hover:bg-gray-50 cursor-pointer" onclick="window.location='{% url 'metabolite_detail' metabolite.metabolite_id %}'">
                         <td class="px-6 py-4 text-wrap text-sm font-medium text-gray-900">
                             {{ forloop.counter }}. {{ metabolite.metabolite__name }}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {{ metabolite.plant_part }}
+                            {{ metabolite.plant_part|default:"-" }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ metabolite.low|default:"-" }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ metabolite.high|default:"-" }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ metabolite.deviation|default:"-" }}
+                        </td>
+                        <td class="px-6 py-4 text-wrap text-sm text-gray-500">
+                            {{ metabolite.reference|default:"-" }}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {% if metabolite.metabolite__is_ubiquitous %}bg-green-100 text-green-800{% else %}bg-gray-100 text-gray-800{% endif %}">

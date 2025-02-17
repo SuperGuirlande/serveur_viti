@@ -73,7 +73,11 @@ class Plant(models.Model):
         ).values(
             'metabolite_id',
             'metabolite__name',
-            'plant_part'
+            'plant_part',
+            'low',
+            'high',
+            'deviation',
+            'reference'
         ).distinct()  
 
 class MetaboliteActivity(models.Model):
