@@ -21,13 +21,21 @@
 
     <!-- Section Métabolites -->
     <div class="bg-white rounded-lg shadow-lg p-6">
-        <h2 class="text-2xl font-bold text-gray-800 mb-6 flex items-center">
-            <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+        <button 
+            class="w-full flex justify-between items-center text-2xl font-bold text-gray-800 mb-6 focus:outline-none" 
+            onclick="toggleMetabolites()"
+        >
+            <div class="flex items-center">
+                <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                </svg>
+                Métabolites présents
+            </div>
+            <svg id="metabolites-chevron" class="w-6 h-6 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
             </svg>
-            Métabolites présents
-        </h2>
-        <div class="overflow-x-auto">
+        </button>
+        <div id="metabolites-content" class="overflow-x-auto hidden">
             <table class="min-w-full table-auto">
                 <thead class="bg-gray-50">
                     <tr>
@@ -37,8 +45,8 @@
                     </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
-                    {% for metabolite in plant.get_metabolites_with_parts %}
-                    <tr class="hover:bg-gray-50 cursor-pointer" onclick="window.location='{% url 'metabolite_detail' metabolite.metabolite_id %}'">
+                    {% for metabolite in metabolites %}
+                    <tr class="hover:bg-gray-50 cursor-pointer" onclick="window.location='{% url 'metabolite_detail' metabolite.metabolite_id %}';">
                         <td class="px-6 py-4 text-wrap text-sm font-medium text-gray-900">
                             {{ forloop.counter }}. {{ metabolite.metabolite__name }}
                         </td>
@@ -58,7 +66,119 @@
                     {% endfor %}
                 </tbody>
             </table>
+
+            <!-- Pagination -->
+            {% if metabolites.paginator.num_pages > 1 %}
+            <div class="mt-6 flex justify-center">
+                <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                    {% if metabolites.has_previous %}
+                        <a href="?page=1" class="relative inline-flex items-center px-4 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                            Première
+                        </a>
+                        <a href="?page={{ metabolites.previous_page_number }}" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                            Précédente
+                        </a>
+                    {% endif %}
+
+                    <span class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-green-600 text-sm font-medium text-white">
+                        Page {{ metabolites.number }} sur {{ metabolites.paginator.num_pages }}
+                    </span>
+
+                    {% if metabolites.has_next %}
+                        <a href="?page={{ metabolites.next_page_number }}" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                            Suivante
+                        </a>
+                        <a href="?page={{ metabolites.paginator.num_pages }}" class="relative inline-flex items-center px-4 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                            Dernière
+                        </a>
+                    {% endif %}
+                </nav>
+            </div>
+            {% endif %}
         </div>
     </div>
+
+    <!-- Section Métabolites en commun -->
+    <div class="bg-white rounded-lg shadow-lg p-6 mt-8">
+        <button 
+            class="w-full flex justify-between items-center text-2xl font-bold text-gray-800 mb-6 focus:outline-none" 
+            onclick="toggleCommonMetabolites()"
+        >
+            <div class="flex items-center">
+                <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                </svg>
+                Métabolites en commun
+            </div>
+            <svg id="common-metabolites-chevron" class="w-6 h-6 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+        </button>
+        <div id="common-metabolites-content" class="overflow-x-auto hidden">
+            {% if debug_mode %}
+            <div class="bg-yellow-100 p-4 mb-4 rounded">
+                <h3 class="font-bold">Informations de débogage:</h3>
+                <p>Nombre total de plantes avec métabolites en commun: {{ common_plants|length }}</p>
+                {% for plant in common_plants|slice:":3" %}
+                <div class="mt-2">
+                    <p>- {{ plant.name }}: {{ plant.common_metabolites_count }} métabolites en commun</p>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            
+            <table class="min-w-full table-auto">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Plante</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Métabolites en commun</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for common_plant in common_plants %}
+                    <tr class="hover:bg-gray-50 cursor-pointer" onclick="window.location='{% url 'plant_detail' common_plant.id %}';">
+                        <td class="px-6 py-4 text-wrap text-sm font-medium text-gray-900">
+                            {{ common_plant.name }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ common_plant.common_metabolites_count }}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="2" class="px-6 py-4 text-center text-gray-500 italic">Aucune plante avec des métabolites en commun</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        function toggleMetabolites() {
+            const content = document.getElementById('metabolites-content');
+            const chevron = document.getElementById('metabolites-chevron');
+            content.classList.toggle('hidden');
+            chevron.classList.toggle('rotate-180');
+        }
+
+        function toggleCommonMetabolites() {
+            const content = document.getElementById('common-metabolites-content');
+            const chevron = document.getElementById('common-metabolites-chevron');
+            content.classList.toggle('hidden');
+            chevron.classList.toggle('rotate-180');
+        }
+
+        // Vérifier si on a un paramètre de page dans l'URL
+        document.addEventListener('DOMContentLoaded', function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.has('page')) {
+                const content = document.getElementById('metabolites-content');
+                const chevron = document.getElementById('metabolites-chevron');
+                content.classList.remove('hidden');
+                chevron.classList.add('rotate-180');
+            }
+        });
+    </script>
 </div>
 {% endblock %} 
