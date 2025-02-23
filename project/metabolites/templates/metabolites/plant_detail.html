@@ -16,6 +16,12 @@
                 <span class="text-sm text-gray-500">Nombre de métabolites uniques</span>
                 <span class="text-2xl font-bold">{{ plant.get_unique_metabolites_count }}</span>
             </div>
+            {% if activity_filter %}
+            <div class="flex flex-col gap-2 text-center">
+                <span class="text-sm text-gray-500">Métabolites avec l'activité "{{ activity_filter }}"</span>
+                <span class="text-2xl font-bold">{{ metabolite_count_by_activity }}</span>
+            </div>
+            {% endif %}
         </div>
     </div>
 
@@ -50,9 +56,9 @@
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
                     {% for metabolite in metabolites %}
-                    <tr class="hover:bg-gray-50 cursor-pointer" onclick="window.location='{% url 'metabolite_detail' metabolite.metabolite_id %}'">
+                    <tr class="hover:bg-gray-50 cursor-pointer" onclick="window.location='{% url 'metabolite_detail' metabolite.metabolite_id %}';">
                         <td class="px-6 py-4 text-wrap text-sm font-medium text-gray-900">
-                            {{ forloop.counter }}. {{ metabolite.metabolite__name }}
+                            {{ start_number|add:forloop.counter }}. {{ metabolite.metabolite__name }}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             {{ metabolite.plant_part|default:"-" }}
@@ -132,22 +138,45 @@
         </button>
         <div id="common-metabolites-content" class="overflow-x-auto hidden">
             {% if debug_mode %}
-            <div class="bg-yellow-100 p-4 mb-4 rounded">
-                <h3 class="font-bold">Informations de débogage:</h3>
+            <div class="bg-green-100 p-4 mb-4 rounded-xl">
                 <p>Nombre total de plantes avec métabolites en commun: {{ common_plants|length }}</p>
-                {% for plant in common_plants|slice:":3" %}
-                <div class="mt-2">
-                    <p>- {{ plant.name }}: {{ plant.common_metabolites_count }} métabolites en commun</p>
-                </div>
-                {% endfor %}
             </div>
             {% endif %}
+
+            <div class="activity-filter mb-6">
+                <form method="GET" class="flex gap-4 items-center">
+                    <select name="activity" class="rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500">
+                        <option value="">Toutes les activités</option>
+                        {% for activity in activities %}
+                        <option value="{{ activity.name }}" {% if activity.name == selected_activity %}selected{% endif %}>
+                            {{ activity.name }}
+                        </option>
+                        {% endfor %}    
+                    </select>
+                    <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors">
+                        Filtrer
+                    </button>
+                    {% if activity_filter %}
+                    <a href="{% url 'plant_detail' plant.id %}" class="text-gray-600 hover:text-gray-800">
+                        Réinitialiser
+                    </a>
+                    {% endif %}
+                </form>
+            </div>
             
             <table class="min-w-full table-auto">
                 <thead class="bg-gray-50">
                     <tr>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Plante</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Métabolites en commun</th>
+                        {% if activity_filter %}
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Métabolites communs avec l'activité "{{ activity_filter }}"
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Total métabolites avec l'activité "{{ activity_filter }}"
+                        </th>
+                        {% endif %}
                     </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
@@ -159,10 +188,20 @@
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             {{ common_plant.common_metabolites_count }}
                         </td>
+                        {% if activity_filter %}
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ common_plant.common_activity_metabolites_count }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ common_plant.total_activity_metabolites_count }}
+                        </td>
+                        {% endif %}
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="2" class="px-6 py-4 text-center text-gray-500 italic">Aucune plante avec des métabolites en commun</td>
+                        <td colspan="4" class="px-6 py-4 text-center text-gray-500 italic">
+                            Aucune plante avec des métabolites en commun
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -185,12 +224,20 @@
             chevron.classList.toggle('rotate-180');
         }
 
-        // Vérifier si on a un paramètre de page dans l'URL
+        // Vérifier si on a un paramètre de page ou d'activité dans l'URL
         document.addEventListener('DOMContentLoaded', function() {
             const urlParams = new URLSearchParams(window.location.search);
+            
             if (urlParams.has('page')) {
                 const content = document.getElementById('metabolites-content');
                 const chevron = document.getElementById('metabolites-chevron');
+                content.classList.remove('hidden');
+                chevron.classList.add('rotate-180');
+            }
+            
+            if (urlParams.has('activity')) {
+                const content = document.getElementById('common-metabolites-content');
+                const chevron = document.getElementById('common-metabolites-chevron');
                 content.classList.remove('hidden');
                 chevron.classList.add('rotate-180');
             }

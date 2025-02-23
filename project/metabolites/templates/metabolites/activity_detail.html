@@ -33,16 +33,16 @@
                     </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
-                    {% for metabolite_activity in activity.metaboliteactivity_set.all %}
-                    <tr class="hover:bg-gray-50 cursor-pointer" onclick="window.location='{% url 'metabolite_detail' metabolite_activity.metabolite.id %}'">
+                    {% for metabolite in metabolites %}
+                    <tr class="hover:bg-gray-50 cursor-pointer" onclick="window.location='{% url 'metabolite_detail' metabolite.id %}'">
                         <td class="px-6 py-4 text-wrap text-sm font-medium text-gray-900">
-                            {{ metabolite_activity.metabolite.name }}
+                            {{ forloop.counter|add:start_number }}. {{ metabolite.metabolite.name }}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {{ metabolite_activity.dosage }}
+                            {{ metabolite.dosage }}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-blue-600 hover:text-blue-800">
-                            {{ metabolite_activity.reference }}
+                            {{ metabolite.reference }}
                         </td>
                     </tr>
                     {% empty %}
@@ -53,6 +53,34 @@
                 </tbody>
             </table>
         </div>
+
+
+              <!-- Pagination stylisée -->
+              <div class="mt-6 flex justify-center">
+                <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                    {% if metabolites.has_previous %}
+                        <a href="?page=1" class="relative inline-flex items-center px-4 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                            Première
+                        </a>
+                        <a href="?page={{ metabolites.previous_page_number }}" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                            Précédente
+                        </a>
+                    {% endif %}
+    
+                    <span class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-green-600 text-sm font-medium text-white">
+                        Page {{ metabolites.number }} sur {{ metabolites.paginator.num_pages }}
+                    </span>
+    
+                    {% if metabolites.has_next %}
+                        <a href="?page={{ metabolites.next_page_number }}" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                            Suivante
+                        </a>
+                        <a href="?page={{ metabolites.paginator.num_pages }}" class="relative inline-flex items-center px-4 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                            Dernière
+                        </a>
+                    {% endif %}
+                </nav>
+            </div>
     </div>
 </div>
 {% endblock %} 

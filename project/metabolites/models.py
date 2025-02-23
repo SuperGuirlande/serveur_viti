@@ -80,6 +80,88 @@ class Plant(models.Model):
             'reference'
         ).distinct()  
 
+    def get_common_plants(self, activity_filter=None):
+        with connection.cursor() as cursor:
+            if activity_filter:
+                query = """
+                    WITH reference_metabolites AS (
+                        SELECT DISTINCT metabolite_id
+                        FROM metabolites_metaboliteplant
+                        WHERE plant_name = %s
+                    ),
+                    activity_metabolites AS (
+                        SELECT DISTINCT mp.metabolite_id, mp.plant_name
+                        FROM metabolites_metaboliteplant mp
+                        JOIN metabolites_metaboliteactivity ma ON ma.metabolite_id = mp.metabolite_id
+                        JOIN metabolites_activity a ON a.id = ma.activity_id
+                        WHERE a.name = %s
+                    )
+                    SELECT 
+                        p.*,
+                        COUNT(DISTINCT mp2.metabolite_id) as common_metabolites_count,
+                        COUNT(DISTINCT CASE 
+                            WHEN am.metabolite_id IS NOT NULL 
+                            AND rm.metabolite_id IS NOT NULL
+                            THEN mp2.metabolite_id 
+                            ELSE NULL 
+                        END) as common_activity_metabolites_count,
+                        COUNT(DISTINCT am_total.metabolite_id) as total_activity_metabolites_count
+                    FROM metabolites_plant p
+                    JOIN metabolites_metaboliteplant mp2 ON mp2.plant_name = p.name
+                    JOIN reference_metabolites rm ON rm.metabolite_id = mp2.metabolite_id
+                    LEFT JOIN activity_metabolites am ON am.metabolite_id = mp2.metabolite_id 
+                        AND am.plant_name = p.name
+                    LEFT JOIN activity_metabolites am_total ON am_total.plant_name = p.name
+                    WHERE p.name != %s
+                    GROUP BY p.id, p.name
+                    HAVING COUNT(DISTINCT mp2.metabolite_id) > 0
+                    ORDER BY total_activity_metabolites_count DESC, 
+                             common_metabolites_count DESC
+                """
+                params = [self.name, activity_filter, self.name]
+            else:
+                query = """
+                    WITH reference_metabolites AS (
+                        SELECT DISTINCT metabolite_id
+                        FROM metabolites_metaboliteplant
+                        WHERE plant_name = %s
+                    )
+                    SELECT p.*, 
+                           COUNT(DISTINCT mp2.metabolite_id) as common_metabolites_count
+                    FROM metabolites_plant p
+                    JOIN metabolites_metaboliteplant mp2 ON mp2.plant_name = p.name
+                    JOIN reference_metabolites rm ON rm.metabolite_id = mp2.metabolite_id
+                    WHERE p.name != %s
+                    GROUP BY p.id, p.name
+                    HAVING COUNT(DISTINCT mp2.metabolite_id) > 0
+                    ORDER BY common_metabolites_count DESC
+                """
+                params = [self.name, self.name]
+
+            cursor.execute(query, params)
+            columns = [col[0] for col in cursor.description]
+            return [
+                dict(zip(columns, row))
+                for row in cursor.fetchall()
+            ]
+    
+    def get_metabolites_by_activity(self, activity_name):
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT COUNT(DISTINCT mp.metabolite_id) 
+                FROM metabolites_metaboliteplant mp
+                JOIN metabolites_metaboliteactivity ma ON ma.metabolite_id = mp.metabolite_id
+                JOIN metabolites_activity a ON a.id = ma.activity_id
+                WHERE mp.plant_name = %s
+                AND a.name = %s
+            """, [self.name, activity_name])
+            return cursor.fetchone()[0]
+            
+
+        
+
+
+
 class MetaboliteActivity(models.Model):
     metabolite = models.ForeignKey(Metabolite, related_name='activities', on_delete=models.CASCADE)
     activity = models.ForeignKey(Activity, on_delete=models.CASCADE)

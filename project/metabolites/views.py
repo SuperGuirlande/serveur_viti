@@ -103,66 +103,58 @@ def all_metabolites(request):
 
     # Pagination
     paginator = Paginator(metabolites_list, 50)
-    page_number = request.GET.get('page')
-    metabolites_list = paginator.get_page(page_number)
+    try:
+        page_number = int(request.GET.get('page', 1))
+    except (ValueError, TypeError):
+        page_number = 1
+    
+    start_number = (page_number - 1) * 50
+    metabolites = paginator.get_page(page_number)
     
     context = {
-        'metabolites': metabolites_list,
+        'metabolites': metabolites,
     }
 
     return render(request, 'metabolites/all_metabolites.html', context)
 
 
+@login_required
 def plant_detail(request, plant_id):
     """
     Vue pour afficher les détails d'une plante spécifique.
     Inclut la liste des métabolites associés avec leurs parties de plante.
     """
     plant = get_object_or_404(Plant, id=plant_id)
-    
+    activity_filter = request.GET.get('activity', None)
+
     # Récupérer les métabolites avec pagination
     metabolites_list = plant.get_metabolites_with_parts()
     paginator = Paginator(metabolites_list, 50)  # 20 métabolites par page
-    page_number = request.GET.get('page')
+    page_number = request.GET.get('page', 1)
+    start_number = (int(page_number) - 1) * 50
     metabolites = paginator.get_page(page_number)
     
+    # Compter les métabolites
     count_metabolites = MetabolitePlant.objects.filter(plant_name=plant.name).count()
     
-    # Obtenir les plantes avec des métabolites en commun
-    common_plants_query = """
-        SELECT p.*, COUNT(DISTINCT mp2.metabolite_id) as common_metabolites_count,
-               GROUP_CONCAT(DISTINCT mp2.metabolite_id) as metabolite_ids
-        FROM metabolites_plant p
-        JOIN metabolites_metaboliteplant mp2 ON mp2.plant_name = p.name
-        WHERE mp2.metabolite_id IN (
-            SELECT DISTINCT mp1.metabolite_id 
-            FROM metabolites_metaboliteplant mp1 
-            WHERE mp1.plant_name = %s
-        )
-        AND p.name != %s
-        GROUP BY p.id, p.name
-        HAVING COUNT(DISTINCT mp2.metabolite_id) > 0
-        ORDER BY common_metabolites_count DESC
-    """
+    # Récupère les plantes communes en fonction du filtre d'activité
+    common_plants = plant.get_common_plants(activity_filter)
     
-    # Ajouter des prints pour le débogage
-    print(f"Recherche des métabolites en commun pour la plante: {plant.name}")
-    
-    common_plants = Plant.objects.raw(common_plants_query, [plant.name, plant.name])
-    
-    # Afficher le nombre de résultats
-    print(f"Nombre de plantes trouvées: {len(list(common_plants))}")
-    
-    # Afficher les premiers résultats pour vérification
-    for p in common_plants[:3]:
-        print(f"Plante: {p.name}, Métabolites en commun: {p.common_metabolites_count}")
-    
+    if activity_filter:
+        metabolite_count_by_activity = plant.get_metabolites_by_activity(activity_filter)
+    else:
+        metabolite_count_by_activity = 0
+
     context = {
+        'activities': Activity.objects.all(),
         'plant': plant,
         'count_metabolites': count_metabolites,
+        'start_number': int(start_number),
         'metabolites': metabolites,
         'common_plants': common_plants,
-        'debug_mode': True,  # Ajouter un mode debug
+        'metabolite_count_by_activity': metabolite_count_by_activity,
+        'activity_filter': activity_filter,
+        'selected_activity': activity_filter,
     }
     
     return render(request, 'metabolites/plant_detail.html', context)
@@ -208,9 +200,38 @@ def all_activities(request):
 @login_required
 def activity_detail(request, activity_id):
     activity = get_object_or_404(Activity, id=activity_id)
+
+    # Récupération des paramètres
+    search = request.GET.get('search')
+    sort = request.GET.get('sort', 'name_asc')
+
+    # Requête de base pour les métabolites de cette activité
+    metabolites_list = activity.metaboliteactivity_set.all()
+
+    # Appliquer la recherche si nécessaire
+    if search:
+        metabolites_list = metabolites_list.filter(metabolite__name__icontains=search)
+
+    # Appliquer le tri
+    if sort == 'name_asc':
+        metabolites_list = metabolites_list.order_by('metabolite__name')
+    elif sort == 'name_desc':
+        metabolites_list = metabolites_list.order_by('-metabolite__name')
+
+    # Pagination
+    paginator = Paginator(metabolites_list, 50)
+    try:
+        page_number = int(request.GET.get('page', 1))
+    except (ValueError, TypeError):
+        page_number = 1
+    
+    start_number = (page_number - 1) * 50
+    metabolites = paginator.get_page(page_number)
     
     context = {
         'activity': activity,
+        'metabolites': metabolites,
+        'start_number': start_number,
     }
     
     return render(request, 'metabolites/activity_detail.html', context)
