@@ -6,6 +6,7 @@ from django.contrib.auth.decorators import login_required
 from django.db import models
 from .utils import log_execution_time
 import logging
+import time
 
 logger = logging.getLogger('metabolites')
 
@@ -99,38 +100,53 @@ def all_plants(request):
     return render(request, 'metabolites/all_plants.html', context)
 
 
+@log_execution_time
 @login_required
 def all_metabolites(request):
+    logger.info("Début de la vue all_metabolites")
+    
     # Récupération des paramètres
     search = request.GET.get('search')
     sort = request.GET.get('sort', 'name_asc')
+    logger.debug(f"Paramètres reçus - search: {search}, sort: {sort}")
 
-    # Requête de base avec annotations pour les comptages
+    # Requête optimisée avec les bons noms de relations
+    start_time = time.time()
+    
+    # Requête de base avec sous-requêtes optimisées
     metabolites_list = Metabolite.objects.annotate(
-        activities_count=Count('activities', distinct=True),
-        plants_count=Count('plants', distinct=True)
+        activities_count=Count('activities', distinct=True),  # Utilisation du related_name 'activities'
+        plants_count=Count('plants', distinct=True)  # Utilisation du related_name 'plants'
+    ).select_related()
+
+    # Optimisation: Utiliser values() pour réduire les données récupérées
+    metabolites_list = metabolites_list.values(
+        'id', 'name', 'is_ubiquitous',
+        'activities_count', 'plants_count'
     )
+    
+    query_time = time.time() - start_time
+    logger.info(f"Temps de la requête principale optimisée: {query_time:.2f} secondes")
 
     # Appliquer la recherche si nécessaire
     if search:
         metabolites_list = metabolites_list.filter(name__icontains=search)
 
     # Appliquer le tri
-    if sort == 'name_asc':
-        metabolites_list = metabolites_list.order_by('name')
-    elif sort == 'name_desc':
-        metabolites_list = metabolites_list.order_by('-name')
-    elif sort == 'activities_asc':
-        metabolites_list = metabolites_list.order_by('activities_count')
-    elif sort == 'activities_desc':
-        metabolites_list = metabolites_list.order_by('-activities_count')
-    elif sort == 'plants_asc':
-        metabolites_list = metabolites_list.order_by('plants_count')
-    elif sort == 'plants_desc':
-        metabolites_list = metabolites_list.order_by('-plants_count')
+    sort_mapping = {
+        'name_asc': 'name',
+        'name_desc': '-name',
+        'activities_asc': 'activities_count',
+        'activities_desc': '-activities_count',
+        'plants_asc': 'plants_count',
+        'plants_desc': '-plants_count'
+    }
+    
+    order_by = sort_mapping.get(sort, 'name')
+    metabolites_list = metabolites_list.order_by(order_by)
 
     # Pagination
-    count_by_page = 50
+    count_by_page = 20
     paginator = Paginator(metabolites_list, count_by_page)
     try:
         page_number = int(request.GET.get('page', 1))
@@ -144,8 +160,11 @@ def all_metabolites(request):
         'metabolites': metabolites,
         'count_by_page': count_by_page,
         'start_number': start_number,
+        'current_sort': sort,
+        'current_search': search,
     }
 
+    logger.info("Fin de la vue all_metabolites")
     return render(request, 'metabolites/all_metabolites.html', context)
 
 
