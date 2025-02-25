@@ -7,6 +7,7 @@ from django.db import models, connection
 from .utils import log_execution_time
 import logging
 import time
+from django.core.cache import cache
 
 logger = logging.getLogger('metabolites')
 
@@ -107,11 +108,39 @@ def all_metabolites(request):
     
     search = request.GET.get('search')
     sort = request.GET.get('sort', 'name_asc')
-    logger.debug(f"Paramètres reçus - search: {search}, sort: {sort}")
+    page_number = int(request.GET.get('page', 1))
+    count_by_page = 20
+    
+    # Clé de cache unique pour cette combinaison de paramètres
+    cache_key = f'metabolites_page_{page_number}_{sort}_{search}'
+    cached_data = cache.get(cache_key)
+    
+    if cached_data:
+        logger.info("Utilisation du cache")
+        return render(request, 'metabolites/all_metabolites.html', cached_data)
 
+    logger.debug(f"Paramètres reçus - search: {search}, sort: {sort}")
+    
     with connection.cursor() as cursor:
-        # Requête de base sans CTE pour MySQL
-        base_query = """
+        # Requête de comptage optimisée
+        count_query = """
+            SELECT COUNT(*)
+            FROM metabolites_metabolite m
+            WHERE 1=1
+        """
+        count_params = []
+        
+        if search:
+            count_query += " AND m.name LIKE %s"
+            count_params.append(f"%{search}%")
+            
+        cursor.execute(count_query, count_params)
+        total_count = cursor.fetchone()[0]
+        
+        # Requête principale avec pagination SQL
+        offset = (page_number - 1) * count_by_page
+        
+        query = """
             SELECT 
                 m.id,
                 m.name,
@@ -121,44 +150,31 @@ def all_metabolites(request):
             FROM metabolites_metabolite m
             LEFT JOIN metabolites_metaboliteactivity ma ON m.id = ma.metabolite_id
             LEFT JOIN metabolites_metaboliteplant mp ON m.id = mp.metabolite_id
-            {where_clause}
-            GROUP BY m.id, m.name, m.is_ubiquitous
         """
         
-        where_clause = ""
+        where_clause = "WHERE 1=1"
         params = []
         
         if search:
-            where_clause = "WHERE m.name LIKE %s"
+            where_clause += " AND m.name LIKE %s"
             params.append(f"%{search}%")
             
-        # Remplacer le placeholder dans la requête
-        query = base_query.format(where_clause=where_clause)
+        group_by = "GROUP BY m.id, m.name, m.is_ubiquitous"
         
-        # Comptage total
-        count_query = f"SELECT COUNT(*) FROM ({query}) as stats"
-        cursor.execute(count_query, params)
-        total_count = cursor.fetchone()[0]
-        
-        # Tri
         sort_mapping = {
-            'name_asc': 'name ASC',
-            'name_desc': 'name DESC',
-            'activities_asc': 'activities_count ASC, name',
-            'activities_desc': 'activities_count DESC, name',
-            'plants_asc': 'plants_count ASC, name',
-            'plants_desc': 'plants_count DESC, name'
+            'name_asc': 'm.name ASC',
+            'name_desc': 'm.name DESC',
+            'activities_asc': 'activities_count ASC, m.name',
+            'activities_desc': 'activities_count DESC, m.name',
+            'plants_asc': 'plants_count ASC, m.name',
+            'plants_desc': 'plants_count DESC, m.name'
         }
-        order_by = sort_mapping.get(sort, 'name ASC')
+        order_by = sort_mapping.get(sort, 'm.name ASC')
         
-        # Requête paginée
-        page_number = int(request.GET.get('page', 1))
-        count_by_page = 20
-        offset = (page_number - 1) * count_by_page
-        
-        # Ajouter le tri et la pagination à la requête de base
         final_query = f"""
             {query}
+            {where_clause}
+            {group_by}
             ORDER BY {order_by}
             LIMIT %s OFFSET %s
         """
@@ -170,55 +186,30 @@ def all_metabolites(request):
         columns = [col[0] for col in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
 
-    class CustomPage:
-        def __init__(self, object_list, number, per_page, total_count):
-            self.object_list = object_list
-            self.number = number
-            self.per_page = per_page
-            self.total_count = total_count
-            
-        def __iter__(self):
-            return iter(self.object_list)
-            
-        @property
-        def paginator(self):
-            return self
-            
-        @property
-        def has_next(self):
-            return self.number < self.num_pages
-            
-        @property
-        def has_previous(self):
-            return self.number > 1
-            
-        @property
-        def num_pages(self):
-            return (self.total_count + self.per_page - 1) // self.per_page
-            
-        @property
-        def next_page_number(self):
-            return self.number + 1 if self.has_next else None
-            
-        @property
-        def previous_page_number(self):
-            return self.number - 1 if self.has_previous else None
-
-    metabolites = CustomPage(
-        results,
-        page_number,
-        count_by_page,
-        total_count
-    )
+    # Création d'un objet de pagination manuel
+    has_next = (offset + count_by_page) < total_count
+    has_previous = page_number > 1
     
     context = {
-        'metabolites': metabolites,
+        'metabolites': results,
+        'page': {
+            'has_next': has_next,
+            'has_previous': has_previous,
+            'next_page_number': page_number + 1 if has_next else None,
+            'previous_page_number': page_number - 1 if has_previous else None,
+            'number': page_number,
+            'num_pages': (total_count + count_by_page - 1) // count_by_page
+        },
         'count_by_page': count_by_page,
         'start_number': offset,
         'current_sort': sort,
         'current_search': search,
+        'total_count': total_count
     }
-
+    
+    # Mise en cache pour 5 minutes
+    cache.set(cache_key, context, 300)
+    
     logger.info("Fin de la vue all_metabolites")
     return render(request, 'metabolites/all_metabolites.html', context)
 
