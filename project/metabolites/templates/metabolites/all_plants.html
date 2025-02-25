@@ -73,7 +73,7 @@
                     {% for plant in plants %}
                     <tr class="hover:bg-gray-50 cursor-pointer" onclick="window.location='{% url 'plant_detail' plant.id %}';">
                         <td class="px-6 py-4 whitespace-normal text-sm text-gray-900">
-                            {{ plant.name }}
+                            {{ forloop.counter|add:start_number }}. {{ plant.name }}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
@@ -95,10 +95,10 @@
         <div class="mt-6 flex justify-center">
             <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
                 {% if plants.has_previous %}
-                    <a href="?page=1" class="relative inline-flex items-center px-4 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                    <a href="?page=1&{{ query_params }}" class="relative inline-flex items-center px-4 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
                         Première
                     </a>
-                    <a href="?page={{ plants.previous_page_number }}" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                    <a href="?page={{ plants.previous_page_number }}&{{ query_params }}" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
                         Précédente
                     </a>
                 {% endif %}
@@ -108,10 +108,10 @@
                 </span>
 
                 {% if plants.has_next %}
-                    <a href="?page={{ plants.next_page_number }}" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                    <a href="?page={{ plants.next_page_number }}&{{ query_params }}" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
                         Suivante
                     </a>
-                    <a href="?page={{ plants.paginator.num_pages }}" class="relative inline-flex items-center px-4 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                    <a href="?page={{ plants.paginator.num_pages }}&{{ query_params }}" class="relative inline-flex items-center px-4 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
                         Dernière
                     </a>
                 {% endif %}

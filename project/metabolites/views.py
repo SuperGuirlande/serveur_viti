@@ -20,17 +20,11 @@ def metabolite_detail(request, id):
 @login_required
 def all_plants(request):
     # Récupération des paramètres
-    search = request.GET.get('search')
+    search = request.GET.get('search', '')
     sort = request.GET.get('sort', 'name_asc')
 
     # Requête de base avec annotation pour le comptage
     plants_list = Plant.objects.annotate(
-        metabolites_count=Count(
-            'name',
-            filter=models.Q(name=models.F('name')),
-            distinct=True
-        )
-    ).annotate(
         metabolites_count=Subquery(
             MetabolitePlant.objects.filter(
                 plant_name=models.OuterRef('name')
@@ -55,17 +49,24 @@ def all_plants(request):
         plants_list = plants_list.order_by('-metabolites_count')
 
     # Pagination
-    paginator = Paginator(plants_list, 50)
-    page_number = request.GET.get('page')
+    count_by_page = 50  
+    paginator = Paginator(plants_list, count_by_page)
+    page_number = request.GET.get('page', 1)
     plants_list = paginator.get_page(page_number)
+    start_number = (int(page_number) - 1) * count_by_page
 
-    for plant in plants_list:
-        all_metabolites = MetabolitePlant.objects.filter(plant_name=plant.name)
-        count = all_metabolites.count()
-        plant.all_metabolites_count = count
+    # Ajouter les paramètres actuels pour la pagination
+    query_params = request.GET.copy()
+    if 'page' in query_params:
+        del query_params['page']
     
     context = {
         'plants': plants_list,
+        'current_sort': sort,
+        'current_search': search,
+        'query_params': query_params.urlencode(),
+        'start_number': start_number,
+        'count_by_page': count_by_page,
     }
 
     return render(request, 'metabolites/all_plants.html', context)
@@ -120,41 +121,60 @@ def all_metabolites(request):
 
 @login_required
 def plant_detail(request, plant_id):
-    """
-    Vue pour afficher les détails d'une plante spécifique.
-    Inclut la liste des métabolites associés avec leurs parties de plante.
-    """
     plant = get_object_or_404(Plant, id=plant_id)
     activity_filter = request.GET.get('activity', None)
-
-    # Récupérer les métabolites avec pagination
+    
+    # Pagination des métabolites
+    count_by_page = 50
     metabolites_list = plant.get_metabolites_with_parts()
-    paginator = Paginator(metabolites_list, 50)  # 20 métabolites par page
-    page_number = request.GET.get('page', 1)
-    start_number = (int(page_number) - 1) * 50
-    metabolites = paginator.get_page(page_number)
+    metabolites_paginator = Paginator(metabolites_list, count_by_page)
+    metabolites_page = request.GET.get('metabolites_page', 1)
+    metabolites_start = (int(metabolites_page) - 1) * count_by_page
+    metabolites = metabolites_paginator.get_page(metabolites_page)
     
-    # Compter les métabolites
-    count_metabolites = MetabolitePlant.objects.filter(plant_name=plant.name).count()
+    # Récupère les plantes communes avec pagination SQL
+    common_page = int(request.GET.get('common_page', 1))
+    common_plants_data = plant.get_common_plants(
+        activity_filter=activity_filter,
+        page=common_page,
+        per_page=count_by_page
+    )
     
-    # Récupère les plantes communes en fonction du filtre d'activité
-    common_plants = plant.get_common_plants(activity_filter)
-    
-    if activity_filter:
-        metabolite_count_by_activity = plant.get_metabolites_by_activity(activity_filter)
-    else:
-        metabolite_count_by_activity = 0
+    # Calcul des pourcentages pour les plantes de la page courante
+    for plant_data in common_plants_data['results']:
+        try:
+            if activity_filter:
+                total = plant_data.get('total_metabolites_count', 0)
+            else:
+                total = plant_data.get('total_metabolites_count', 0)
+            common = plant_data.get('common_metabolites_count', 0)
+            if total > 0:
+                percentage = (common * 100.0) / total
+                plant_data['common_metabolites_percentage'] = round(percentage, 1)
+            else:
+                plant_data['common_metabolites_percentage'] = 0.0
+        except (KeyError, TypeError):
+            plant_data['common_metabolites_percentage'] = 0.0
 
+    # Paramètres pour la pagination
+    query_params = request.GET.copy()
+    if 'metabolites_page' in query_params:
+        del query_params['metabolites_page']
+    if 'common_page' in query_params:
+        del query_params['common_page']
+    
     context = {
         'activities': Activity.objects.all(),
         'plant': plant,
-        'count_metabolites': count_metabolites,
-        'start_number': int(start_number),
+        'count_metabolites': plant.all_metabolites_count,
+        'metabolites_start': metabolites_start,
+        'common_start': (common_page - 1) * count_by_page,
         'metabolites': metabolites,
-        'common_plants': common_plants,
-        'metabolite_count_by_activity': metabolite_count_by_activity,
+        'common_plants': common_plants_data,
         'activity_filter': activity_filter,
         'selected_activity': activity_filter,
+        'query_params': query_params.urlencode(),
+        'count_by_page': count_by_page,
     }
     
     return render(request, 'metabolites/plant_detail.html', context)

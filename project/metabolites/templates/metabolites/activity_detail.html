@@ -34,7 +34,7 @@
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
                     {% for metabolite in metabolites %}
-                    <tr class="hover:bg-gray-50 cursor-pointer" onclick="window.location='{% url 'metabolite_detail' metabolite.id %}'">
+                    <tr class="hover:bg-gray-50 cursor-pointer" onclick="window.location='{% url 'metabolite_detail' metabolite.metabolite.id %}'">
                         <td class="px-6 py-4 text-wrap text-sm font-medium text-gray-900">
                             {{ forloop.counter|add:start_number }}. {{ metabolite.metabolite.name }}
                         </td>
