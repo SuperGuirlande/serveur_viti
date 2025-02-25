@@ -3,7 +3,7 @@ from django.db.models import Count, Subquery, OuterRef, Prefetch
 from metabolites.models import Metabolite, MetaboliteActivity, MetabolitePlant, Plant, Activity
 from django.core.paginator import Paginator
 from django.contrib.auth.decorators import login_required
-from django.db import models
+from django.db import models, connection
 from .utils import log_execution_time
 import logging
 import time
@@ -110,62 +110,120 @@ def all_metabolites(request):
     sort = request.GET.get('sort', 'name_asc')
     logger.debug(f"Paramètres reçus - search: {search}, sort: {sort}")
 
-    start_time = time.time()
-    
-    # Requête optimisée avec order_by explicite pour éviter l'avertissement de pagination
-    base_query = Metabolite.objects.all()
-
-    # Appliquer la recherche si nécessaire
-    if search:
-        base_query = base_query.filter(name__icontains=search)
-
-    # Appliquer le tri avant les annotations pour optimiser
-    sort_mapping = {
-        'name_asc': 'name',
-        'name_desc': '-name',
-        'activities_asc': 'activities_count',
-        'activities_desc': '-activities_count',
-        'plants_asc': 'plants_count',
-        'plants_desc': '-plants_count'
-    }
-    
-    order_by = sort_mapping.get(sort, 'name')
-    
-    # Annotations après le tri de base
-    metabolites_list = base_query.annotate(
-        activities_count=Count('activities', distinct=True),
-        plants_count=Count('plants', distinct=True)
-    ).order_by(order_by, 'id')  # Ajout de 'id' pour garantir un ordre stable
-    
-    # Optimisation: Utiliser values() pour réduire les données récupérées
-    metabolites_list = metabolites_list.values(
-        'id', 'name', 'is_ubiquitous',
-        'activities_count', 'plants_count'
-    )
-    
-    query_time = time.time() - start_time
-    logger.info(f"Temps de la requête principale optimisée: {query_time:.2f} secondes")
-    logger.debug(f"Nombre total de métabolites: {metabolites_list.count()}")
-
-    # Pagination
-    count_by_page = 20
-    paginator = Paginator(metabolites_list, count_by_page)
-    try:
+    # Utiliser SQL brut pour une meilleure performance
+    with connection.cursor() as cursor:
+        # Construction de la requête de base
+        query = """
+            SELECT 
+                m.id,
+                m.name,
+                m.is_ubiquitous,
+                COUNT(DISTINCT ma.id) as activities_count,
+                COUNT(DISTINCT mp.id) as plants_count
+            FROM metabolites_metabolite m
+            LEFT JOIN metabolites_metaboliteactivity ma ON m.id = ma.metabolite_id
+            LEFT JOIN metabolites_metaboliteplant mp ON m.id = mp.metabolite_id
+        """
+        
+        params = []
+        where_clauses = []
+        
+        # Ajouter la recherche si nécessaire
+        if search:
+            where_clauses.append("m.name LIKE %s")
+            params.append(f"%{search}%")
+            
+        if where_clauses:
+            query += " WHERE " + " AND ".join(where_clauses)
+            
+        query += " GROUP BY m.id, m.name, m.is_ubiquitous"
+        
+        # Ajouter le tri
+        sort_mapping = {
+            'name_asc': 'name ASC',
+            'name_desc': 'name DESC',
+            'activities_asc': 'activities_count ASC, name',
+            'activities_desc': 'activities_count DESC, name',
+            'plants_asc': 'plants_count ASC, name',
+            'plants_desc': 'plants_count DESC, name'
+        }
+        query += f" ORDER BY {sort_mapping.get(sort, 'name ASC')}"
+        
+        # Exécuter d'abord le comptage total
+        count_query = f"SELECT COUNT(*) FROM ({query}) as subquery"
+        cursor.execute(count_query, params)
+        total_count = cursor.fetchone()[0]
+        
+        # Puis la requête paginée
         page_number = int(request.GET.get('page', 1))
-    except (ValueError, TypeError):
-        page_number = 1
-    
-    start_number = (page_number - 1) * count_by_page
-    
-    # Mesure du temps de pagination
-    start_time = time.time()
-    metabolites = paginator.get_page(page_number)
-    logger.info(f"Temps de pagination: {time.time() - start_time:.2f} secondes")
+        count_by_page = 20
+        offset = (page_number - 1) * count_by_page
+        
+        query += f" LIMIT {count_by_page} OFFSET {offset}"
+        
+        # Exécuter la requête principale
+        start_time = time.time()
+        cursor.execute(query, params)
+        logger.info(f"Temps de la requête principale: {time.time() - start_time:.2f} secondes")
+        
+        # Formater les résultats
+        columns = [col[0] for col in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        
+    # Créer un objet Paginator personnalisé
+    class CustomPaginator:
+        def __init__(self, object_list, number, per_page, total_count):
+            self.object_list = object_list
+            self.number = number
+            self.per_page = per_page
+            self.total_count = total_count
+            
+        def __iter__(self):
+            return iter(self.object_list)
+            
+        @property
+        def paginator(self):
+            return self
+            
+        @property
+        def num_pages(self):
+            return (self.total_count + self.per_page - 1) // self.per_page
+            
+        @property
+        def has_next(self):
+            return self.number < self.num_pages
+            
+        @property
+        def has_previous(self):
+            return self.number > 1
+            
+        def page(self, number):
+            return self
+            
+        @property
+        def next_page_number(self):
+            return self.number + 1 if self.has_next else None
+            
+        @property
+        def previous_page_number(self):
+            return self.number - 1 if self.has_previous else None
+            
+        @property
+        def count(self):
+            return self.total_count
+
+    # Créer l'instance du paginator avec les résultats
+    metabolites = CustomPaginator(
+        results, 
+        page_number, 
+        count_by_page,
+        total_count
+    )
     
     context = {
         'metabolites': metabolites,
         'count_by_page': count_by_page,
-        'start_number': start_number,
+        'start_number': offset,
         'current_sort': sort,
         'current_search': search,
     }

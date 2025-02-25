@@ -8,88 +8,121 @@ from .utils import log_execution_time
 logger = logging.getLogger('metabolites')
 
 class Metabolite(models.Model):
-    name = models.CharField(max_length=255, unique=True)
+    name = models.CharField(max_length=255, unique=True, db_index=True)
     is_ubiquitous = models.BooleanField(default=False)
 
-
-    def get_unique_activities(self):
-        return MetaboliteActivity.objects.filter(metabolite=self).distinct()
-    
+    @cached_property
     def get_unique_activities_count(self):
-        return MetaboliteActivity.objects.filter(metabolite=self).distinct().count()
+        """Version optimisée et mise en cache"""
+        return self.activities.count()
     
+    @cached_property
     def get_unique_plants_count(self):
-        return MetabolitePlant.objects.filter(metabolite=self).values('plant_name').distinct().count()
+        """Version optimisée et mise en cache"""
+        return self.plants.values('plant_name').distinct().count()
     
     def get_plants_with_parts(self):
-        return MetabolitePlant.objects.filter(
-            metabolite=self
-        ).values(
-            'plant_name',
-            'plant_part',
-            'low',
-            'high',
-            'deviation',
-            'reference'
-        ).annotate(
-            plant_id=models.Subquery(
-                Plant.objects.filter(
-                    name=models.OuterRef('plant_name')
-                ).values('id')[:1]
-            )
-        ).distinct()
+        """Version optimisée avec SQL brut"""
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT 
+                    mp.plant_name,
+                    mp.plant_part,
+                    mp.low,
+                    mp.high,
+                    mp.deviation,
+                    mp.reference,
+                    p.id as plant_id
+                FROM metabolites_metaboliteplant mp
+                JOIN metabolites_plant p ON p.name = mp.plant_name
+                WHERE mp.metabolite_id = %s
+                ORDER BY mp.plant_name, mp.plant_part
+            """, [self.id])
+            
+            columns = [col[0] for col in cursor.description]
+            return [dict(zip(columns, row)) for row in cursor.fetchall()]
     
     def get_activities_with_details(self):
-        return MetaboliteActivity.objects.filter(
-            metabolite=self
-        ).values(
-            'activity__name',
-            'dosage',
-            'reference'
-        ).distinct()
+        """Version optimisée avec values() et select_related"""
+        return (
+            self.activities.select_related('activity')
+            .values(
+                'activity__name',
+                'dosage',
+                'reference'
+            )
+            .distinct()
+            .order_by('activity__name')  # Ajout d'un ordre explicite
+        )
 
     def __str__(self):
         return self.name
     
     def get_activities_by_plant(self):
-        """Retourne un dictionnaire des activités groupées par plante"""
-        return (
-            self.plants.values('plant_name')
-            .annotate(
-                activities=models.Subquery(
-                    MetaboliteActivity.objects.filter(
-                        metabolite=self
-                    ).values('activity__name')
-                    .distinct()
-                )
-            )
-        )
+        """Version optimisée avec SQL brut"""
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT 
+                    mp.plant_name,
+                    GROUP_CONCAT(DISTINCT a.name ORDER BY a.name) as activities
+                FROM metabolites_metaboliteplant mp
+                JOIN metabolites_metaboliteactivity ma ON ma.metabolite_id = %s
+                JOIN metabolites_activity a ON a.id = ma.activity_id
+                WHERE mp.metabolite_id = %s
+                GROUP BY mp.plant_name
+                ORDER BY mp.plant_name
+            """, [self.id, self.id])
+            
+            return [
+                {'plant_name': row[0], 'activities': row[1].split(',')}
+                for row in cursor.fetchall()
+            ]
     
     def get_plants_by_activity(self):
-        """Retourne un dictionnaire des plantes groupées par activité"""
-        return (
-            self.activities.values('activity__name')
-            .annotate(
-                plants=models.Subquery(
-                    MetabolitePlant.objects.filter(
-                        metabolite=self
-                    ).values('plant_name')
-                    .distinct()
-                )
-            )
-        )
+        """Version optimisée avec SQL brut"""
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT 
+                    a.name as activity_name,
+                    GROUP_CONCAT(DISTINCT mp.plant_name ORDER BY mp.plant_name) as plants
+                FROM metabolites_activity a
+                JOIN metabolites_metaboliteactivity ma ON ma.activity_id = a.id
+                JOIN metabolites_metaboliteplant mp ON mp.metabolite_id = ma.metabolite_id
+                WHERE ma.metabolite_id = %s
+                GROUP BY a.name
+                ORDER BY a.name
+            """, [self.id])
+            
+            return [
+                {'activity_name': row[0], 'plants': row[1].split(',')}
+                for row in cursor.fetchall()
+            ]
 
     @classmethod
     def get_global_matrix(cls):
-        """Retourne une matrice de relations entre métabolites, plantes et activités"""
-        return (
-            cls.objects
-            .annotate(
-                plant_count=models.Count('plants__plant_name', distinct=True),
-                activity_count=models.Count('activities__activity', distinct=True)
-            )
-            .values('name', 'is_ubiquitous', 'plant_count', 'activity_count')
-        )
+        """Version optimisée avec SQL brut"""
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT 
+                    m.name,
+                    m.is_ubiquitous,
+                    COUNT(DISTINCT mp.plant_name) as plant_count,
+                    COUNT(DISTINCT ma.activity_id) as activity_count
+                FROM metabolites_metabolite m
+                LEFT JOIN metabolites_metaboliteplant mp ON mp.metabolite_id = m.id
+                LEFT JOIN metabolites_metaboliteactivity ma ON ma.metabolite_id = m.id
+                GROUP BY m.id, m.name, m.is_ubiquitous
+                ORDER BY m.name
+            """)
+            
+            columns = ['name', 'is_ubiquitous', 'plant_count', 'activity_count']
+            return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['name']),
+            models.Index(fields=['is_ubiquitous']),
+        ]
 
 class Activity(models.Model):
     name = models.CharField(max_length=255, unique=True, db_index=True)
