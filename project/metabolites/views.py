@@ -110,37 +110,58 @@ def all_metabolites(request):
     sort = request.GET.get('sort', 'name_asc')
     page_number = int(request.GET.get('page', 1))
     count_by_page = 20
-    
-    # Clé de cache unique pour cette combinaison de paramètres
-    cache_key = f'metabolites_page_{page_number}_{sort}_{search}'
-    cached_data = cache.get(cache_key)
-    
-    if cached_data:
-        logger.info("Utilisation du cache")
-        return render(request, 'metabolites/all_metabolites.html', cached_data)
+    offset = (page_number - 1) * count_by_page
 
     logger.debug(f"Paramètres reçus - search: {search}, sort: {sort}")
     
     with connection.cursor() as cursor:
-        # Requête de comptage optimisée
-        count_query = """
-            SELECT COUNT(*)
+        # 1. D'abord, on obtient juste les IDs des métabolites paginés
+        base_query = """
+            SELECT m.id
             FROM metabolites_metabolite m
             WHERE 1=1
         """
-        count_params = []
+        params = []
         
         if search:
-            count_query += " AND m.name LIKE %s"
-            count_params.append(f"%{search}%")
+            base_query += " AND m.name LIKE %s"
+            params.append(f"%{search}%")
             
-        cursor.execute(count_query, count_params)
+        # Comptage total pour la pagination
+        count_query = f"SELECT COUNT(*) FROM ({base_query}) as count_table"
+        cursor.execute(count_query, params)
         total_count = cursor.fetchone()[0]
         
-        # Requête principale avec pagination SQL
-        offset = (page_number - 1) * count_by_page
+        # Tri et pagination pour obtenir les IDs
+        sort_mapping = {
+            'name_asc': 'm.name ASC',
+            'name_desc': 'm.name DESC'
+        }
+        order_by = sort_mapping.get(sort, 'm.name ASC')
         
-        query = """
+        id_query = f"""
+            {base_query}
+            ORDER BY {order_by}
+            LIMIT %s OFFSET %s
+        """
+        
+        cursor.execute(id_query, params + [count_by_page, offset])
+        metabolite_ids = [row[0] for row in cursor.fetchall()]
+        
+        if not metabolite_ids:
+            return render(request, 'metabolites/all_metabolites.html', {
+                'metabolites': [],
+                'page': {'number': page_number, 'num_pages': 0},
+                'count_by_page': count_by_page,
+                'start_number': offset,
+                'current_sort': sort,
+                'current_search': search,
+                'total_count': 0
+            })
+        
+        # 2. Ensuite, on récupère les détails complets seulement pour ces IDs
+        placeholders = ','.join(['%s'] * len(metabolite_ids))
+        details_query = f"""
             SELECT 
                 m.id,
                 m.name,
@@ -150,43 +171,30 @@ def all_metabolites(request):
             FROM metabolites_metabolite m
             LEFT JOIN metabolites_metaboliteactivity ma ON m.id = ma.metabolite_id
             LEFT JOIN metabolites_metaboliteplant mp ON m.id = mp.metabolite_id
-        """
-        
-        where_clause = "WHERE 1=1"
-        params = []
-        
-        if search:
-            where_clause += " AND m.name LIKE %s"
-            params.append(f"%{search}%")
-            
-        group_by = "GROUP BY m.id, m.name, m.is_ubiquitous"
-        
-        sort_mapping = {
-            'name_asc': 'm.name ASC',
-            'name_desc': 'm.name DESC',
-            'activities_asc': 'activities_count ASC, m.name',
-            'activities_desc': 'activities_count DESC, m.name',
-            'plants_asc': 'plants_count ASC, m.name',
-            'plants_desc': 'plants_count DESC, m.name'
-        }
-        order_by = sort_mapping.get(sort, 'm.name ASC')
-        
-        final_query = f"""
-            {query}
-            {where_clause}
-            {group_by}
-            ORDER BY {order_by}
-            LIMIT %s OFFSET %s
+            WHERE m.id IN ({placeholders})
+            GROUP BY m.id, m.name, m.is_ubiquitous
         """
         
         start_time = time.time()
-        cursor.execute(final_query, params + [count_by_page, offset])
+        cursor.execute(details_query, metabolite_ids)
         logger.info(f"Temps de la requête principale: {time.time() - start_time:.2f} secondes")
         
         columns = [col[0] for col in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        
+        # Tri final des résultats si nécessaire
+        if sort in ['activities_asc', 'activities_desc']:
+            results.sort(
+                key=lambda x: (x['activities_count'], x['name']),
+                reverse=(sort == 'activities_desc')
+            )
+        elif sort in ['plants_asc', 'plants_desc']:
+            results.sort(
+                key=lambda x: (x['plants_count'], x['name']),
+                reverse=(sort == 'plants_desc')
+            )
 
-    # Création d'un objet de pagination manuel
+    # Création de l'objet de pagination
     has_next = (offset + count_by_page) < total_count
     has_previous = page_number > 1
     
@@ -206,9 +214,6 @@ def all_metabolites(request):
         'current_search': search,
         'total_count': total_count
     }
-    
-    # Mise en cache pour 5 minutes
-    cache.set(cache_key, context, 300)
     
     logger.info("Fin de la vue all_metabolites")
     return render(request, 'metabolites/all_metabolites.html', context)
