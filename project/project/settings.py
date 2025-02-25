@@ -167,3 +167,49 @@ DEFAULT_FROM_EMAIL = 'contact@agencecodemaster.com'
 
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Configuration des logs
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+        'sql': {
+            'format': '\n\033[1;31m{duration:.3f}s\033[0m \033[1;33m{sql}\033[0m',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'file': {
+            'level': 'DEBUG',
+            'class': 'logging.FileHandler',
+            'filename': os.path.join(BASE_DIR, 'logs', 'debug.log'),
+            'formatter': 'verbose',
+        },
+        'console': {
+            'level': 'DEBUG',
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+        'sql_console': {
+            'level': 'DEBUG',
+            'class': 'logging.StreamHandler',
+            'formatter': 'sql',
+        },
+    },
+    'loggers': {
+        'metabolites': {
+            'handlers': ['file', 'console'],
+            'level': 'DEBUG',
+            'propagate': True,
+        },
+        'sql_debug': {
+            'handlers': ['sql_console'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+    },
+}

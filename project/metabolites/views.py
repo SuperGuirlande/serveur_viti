@@ -1,10 +1,13 @@
 from django.shortcuts import render, get_object_or_404
-from django.db.models import Count, Subquery, OuterRef
+from django.db.models import Count, Subquery, OuterRef, Prefetch
 from metabolites.models import Metabolite, MetaboliteActivity, MetabolitePlant, Plant, Activity
 from django.core.paginator import Paginator
 from django.contrib.auth.decorators import login_required
 from django.db import models
+from .utils import log_execution_time
+import logging
 
+logger = logging.getLogger('metabolites')
 
 @login_required
 def metabolite_detail(request, id):
@@ -23,7 +26,7 @@ def all_plants(request):
     search = request.GET.get('search', '')
     sort = request.GET.get('sort', 'name_asc')
 
-    # Requête de base avec annotation pour le comptage
+    # Requête de base avec annotation pour le comptage (gardons la logique d'origine)
     plants_list = Plant.objects.annotate(
         metabolites_count=Subquery(
             MetabolitePlant.objects.filter(
@@ -32,7 +35,7 @@ def all_plants(request):
             .annotate(count=Count('metabolite_id', distinct=True))
             .values('count')
         )
-    )
+    ).select_related()  # Ajout de select_related pour optimiser
 
     # Appliquer la recherche si nécessaire
     if search:
@@ -119,17 +122,21 @@ def all_metabolites(request):
     return render(request, 'metabolites/all_metabolites.html', context)
 
 
+@log_execution_time
 @login_required
 def plant_detail(request, plant_id):
+    logger.info(f"Accès aux détails de la plante {plant_id}")
+    
     plant = get_object_or_404(Plant, id=plant_id)
     activity_filter = request.GET.get('activity', None)
     
+    logger.debug(f"Récupération des métabolites pour la plante {plant.name}")
+    metabolites_list = plant.get_metabolites_with_parts()
+    
     # Pagination des métabolites
     count_by_page = 50
-    metabolites_list = plant.get_metabolites_with_parts()
     metabolites_paginator = Paginator(metabolites_list, count_by_page)
     metabolites_page = request.GET.get('metabolites_page', 1)
-    metabolites_start = (int(metabolites_page) - 1) * count_by_page
     metabolites = metabolites_paginator.get_page(metabolites_page)
     
     # Récupère les plantes communes avec pagination SQL
@@ -163,11 +170,15 @@ def plant_detail(request, plant_id):
     if 'common_page' in query_params:
         del query_params['common_page']
     
+    # Ajout du compte des métabolites avec l'activité spécifique
+    metabolite_count_by_activity = plant.get_metabolites_by_activity(activity_filter) if activity_filter else None
+    
+    logger.info(f"Fin du traitement pour la plante {plant.name}")
     context = {
         'activities': Activity.objects.all(),
         'plant': plant,
         'count_metabolites': plant.all_metabolites_count,
-        'metabolites_start': metabolites_start,
+        'metabolites_start': (int(metabolites_page) - 1) * count_by_page,
         'common_start': (common_page - 1) * count_by_page,
         'metabolites': metabolites,
         'common_plants': common_plants_data,
@@ -175,6 +186,7 @@ def plant_detail(request, plant_id):
         'selected_activity': activity_filter,
         'query_params': query_params.urlencode(),
         'count_by_page': count_by_page,
+        'metabolite_count_by_activity': metabolite_count_by_activity,
     }
     
     return render(request, 'metabolites/plant_detail.html', context)
