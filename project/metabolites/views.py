@@ -110,29 +110,16 @@ def all_metabolites(request):
     sort = request.GET.get('sort', 'name_asc')
     logger.debug(f"Paramètres reçus - search: {search}, sort: {sort}")
 
-    # Requête optimisée avec les bons noms de relations
     start_time = time.time()
     
-    # Requête de base avec sous-requêtes optimisées
-    metabolites_list = Metabolite.objects.annotate(
-        activities_count=Count('activities', distinct=True),  # Utilisation du related_name 'activities'
-        plants_count=Count('plants', distinct=True)  # Utilisation du related_name 'plants'
-    ).select_related()
-
-    # Optimisation: Utiliser values() pour réduire les données récupérées
-    metabolites_list = metabolites_list.values(
-        'id', 'name', 'is_ubiquitous',
-        'activities_count', 'plants_count'
-    )
-    
-    query_time = time.time() - start_time
-    logger.info(f"Temps de la requête principale optimisée: {query_time:.2f} secondes")
+    # Requête optimisée avec order_by explicite pour éviter l'avertissement de pagination
+    base_query = Metabolite.objects.all()
 
     # Appliquer la recherche si nécessaire
     if search:
-        metabolites_list = metabolites_list.filter(name__icontains=search)
+        base_query = base_query.filter(name__icontains=search)
 
-    # Appliquer le tri
+    # Appliquer le tri avant les annotations pour optimiser
     sort_mapping = {
         'name_asc': 'name',
         'name_desc': '-name',
@@ -143,7 +130,22 @@ def all_metabolites(request):
     }
     
     order_by = sort_mapping.get(sort, 'name')
-    metabolites_list = metabolites_list.order_by(order_by)
+    
+    # Annotations après le tri de base
+    metabolites_list = base_query.annotate(
+        activities_count=Count('activities', distinct=True),
+        plants_count=Count('plants', distinct=True)
+    ).order_by(order_by, 'id')  # Ajout de 'id' pour garantir un ordre stable
+    
+    # Optimisation: Utiliser values() pour réduire les données récupérées
+    metabolites_list = metabolites_list.values(
+        'id', 'name', 'is_ubiquitous',
+        'activities_count', 'plants_count'
+    )
+    
+    query_time = time.time() - start_time
+    logger.info(f"Temps de la requête principale optimisée: {query_time:.2f} secondes")
+    logger.debug(f"Nombre total de métabolites: {metabolites_list.count()}")
 
     # Pagination
     count_by_page = 20
@@ -154,7 +156,11 @@ def all_metabolites(request):
         page_number = 1
     
     start_number = (page_number - 1) * count_by_page
+    
+    # Mesure du temps de pagination
+    start_time = time.time()
     metabolites = paginator.get_page(page_number)
+    logger.info(f"Temps de pagination: {time.time() - start_time:.2f} secondes")
     
     context = {
         'metabolites': metabolites,
