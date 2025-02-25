@@ -105,40 +105,42 @@ def all_plants(request):
 def all_metabolites(request):
     logger.info("Début de la vue all_metabolites")
     
-    # Récupération des paramètres
     search = request.GET.get('search')
     sort = request.GET.get('sort', 'name_asc')
     logger.debug(f"Paramètres reçus - search: {search}, sort: {sort}")
 
-    # Utiliser SQL brut pour une meilleure performance
     with connection.cursor() as cursor:
-        # Construction de la requête de base
-        query = """
+        # Requête de base sans CTE pour MySQL
+        base_query = """
             SELECT 
                 m.id,
                 m.name,
                 m.is_ubiquitous,
-                COUNT(DISTINCT ma.id) as activities_count,
-                COUNT(DISTINCT mp.id) as plants_count
+                COUNT(DISTINCT ma.activity_id) as activities_count,
+                COUNT(DISTINCT mp.plant_name) as plants_count
             FROM metabolites_metabolite m
             LEFT JOIN metabolites_metaboliteactivity ma ON m.id = ma.metabolite_id
             LEFT JOIN metabolites_metaboliteplant mp ON m.id = mp.metabolite_id
+            {where_clause}
+            GROUP BY m.id, m.name, m.is_ubiquitous
         """
         
+        where_clause = ""
         params = []
-        where_clauses = []
         
-        # Ajouter la recherche si nécessaire
         if search:
-            where_clauses.append("m.name LIKE %s")
+            where_clause = "WHERE m.name LIKE %s"
             params.append(f"%{search}%")
             
-        if where_clauses:
-            query += " WHERE " + " AND ".join(where_clauses)
-            
-        query += " GROUP BY m.id, m.name, m.is_ubiquitous"
+        # Remplacer le placeholder dans la requête
+        query = base_query.format(where_clause=where_clause)
         
-        # Ajouter le tri
+        # Comptage total
+        count_query = f"SELECT COUNT(*) FROM ({query}) as stats"
+        cursor.execute(count_query, params)
+        total_count = cursor.fetchone()[0]
+        
+        # Tri
         sort_mapping = {
             'name_asc': 'name ASC',
             'name_desc': 'name DESC',
@@ -147,31 +149,28 @@ def all_metabolites(request):
             'plants_asc': 'plants_count ASC, name',
             'plants_desc': 'plants_count DESC, name'
         }
-        query += f" ORDER BY {sort_mapping.get(sort, 'name ASC')}"
+        order_by = sort_mapping.get(sort, 'name ASC')
         
-        # Exécuter d'abord le comptage total
-        count_query = f"SELECT COUNT(*) FROM ({query}) as subquery"
-        cursor.execute(count_query, params)
-        total_count = cursor.fetchone()[0]
-        
-        # Puis la requête paginée
+        # Requête paginée
         page_number = int(request.GET.get('page', 1))
         count_by_page = 20
         offset = (page_number - 1) * count_by_page
         
-        query += f" LIMIT {count_by_page} OFFSET {offset}"
+        # Ajouter le tri et la pagination à la requête de base
+        final_query = f"""
+            {query}
+            ORDER BY {order_by}
+            LIMIT %s OFFSET %s
+        """
         
-        # Exécuter la requête principale
         start_time = time.time()
-        cursor.execute(query, params)
+        cursor.execute(final_query, params + [count_by_page, offset])
         logger.info(f"Temps de la requête principale: {time.time() - start_time:.2f} secondes")
         
-        # Formater les résultats
         columns = [col[0] for col in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
-        
-    # Créer un objet Paginator personnalisé
-    class CustomPaginator:
+
+    class CustomPage:
         def __init__(self, object_list, number, per_page, total_count):
             self.object_list = object_list
             self.number = number
@@ -186,10 +185,6 @@ def all_metabolites(request):
             return self
             
         @property
-        def num_pages(self):
-            return (self.total_count + self.per_page - 1) // self.per_page
-            
-        @property
         def has_next(self):
             return self.number < self.num_pages
             
@@ -197,8 +192,9 @@ def all_metabolites(request):
         def has_previous(self):
             return self.number > 1
             
-        def page(self, number):
-            return self
+        @property
+        def num_pages(self):
+            return (self.total_count + self.per_page - 1) // self.per_page
             
         @property
         def next_page_number(self):
@@ -207,15 +203,10 @@ def all_metabolites(request):
         @property
         def previous_page_number(self):
             return self.number - 1 if self.has_previous else None
-            
-        @property
-        def count(self):
-            return self.total_count
 
-    # Créer l'instance du paginator avec les résultats
-    metabolites = CustomPaginator(
-        results, 
-        page_number, 
+    metabolites = CustomPage(
+        results,
+        page_number,
         count_by_page,
         total_count
     )

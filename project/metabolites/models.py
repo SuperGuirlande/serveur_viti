@@ -428,8 +428,7 @@ class MetaboliteActivity(models.Model):
     class Meta:
         unique_together = ['metabolite', 'activity', 'dosage', 'reference']
         indexes = [
-            models.Index(fields=['metabolite', 'activity']),
-            models.Index(fields=['activity']),
+            models.Index(fields=['metabolite_id', 'activity_id']),
         ]
 
     def __str__(self):
@@ -450,6 +449,7 @@ class MetabolitePlant(models.Model):
 
     class Meta:
         indexes = [
+            models.Index(fields=['metabolite_id', 'plant_name']),
             models.Index(fields=['plant_name', 'metabolite', 'plant_part'], name='idx_plant_metab_part'),
             models.Index(fields=['metabolite', 'plant_name'], name='idx_metab_plant'),
             models.Index(fields=['metabolite'], name='idx_metabolite'),
