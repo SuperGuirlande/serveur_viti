@@ -307,7 +307,6 @@ class MetaboliteActivity(models.Model):
 
 class MetabolitePlant(models.Model):
     metabolite = models.ForeignKey(Metabolite, related_name='plants', on_delete=models.CASCADE)
-    plant = models.ForeignKey(Plant, related_name='metabolites', on_delete=models.CASCADE)
     plant_name = models.CharField(max_length=255, db_index=True)
     plant_part = models.CharField(max_length=255)
     low = models.DecimalField(max_digits=10, decimal_places=1, blank=True, null=True)
