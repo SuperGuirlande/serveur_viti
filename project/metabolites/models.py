@@ -97,6 +97,104 @@ class Activity(models.Model):
     def __str__(self):
         return self.name
     
+    def get_plants_by_total_concentration(self, page=1, per_page=50):
+        """Retourne les plantes triées par concentration totale des métabolites ayant cette activité"""
+        offset = (page - 1) * per_page
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                WITH activity_metabolites AS (
+                    SELECT DISTINCT ma.metabolite_id, m.name as metabolite_name
+                    FROM metabolites_metaboliteactivity ma
+                    JOIN metabolites_metabolite m ON m.id = ma.metabolite_id
+                    WHERE ma.activity_id = %s
+                ),
+                plant_details AS (
+                    SELECT 
+                        p.id,
+                        p.name,
+                        am.metabolite_name,
+                        mp.plant_part,
+                        mp.high
+                    FROM metabolites_plant p
+                    JOIN metabolites_metaboliteplant mp ON mp.plant_name = p.name
+                    JOIN activity_metabolites am ON am.metabolite_id = mp.metabolite_id
+                ),
+                plant_summary AS (
+                    SELECT 
+                        id,
+                        name,
+                        COUNT(DISTINCT metabolite_name) as metabolites_count,
+                        GROUP_CONCAT(
+                            DISTINCT
+                            CONCAT(metabolite_name, ":", plant_part, ":", COALESCE(high, "NULL"))
+                            SEPARATOR "|"
+                        ) as details,
+                        CASE 
+                            WHEN COUNT(CASE WHEN high IS NULL THEN 1 END) > 0 THEN NULL
+                            ELSE SUM(COALESCE(high, 0))
+                        END as total_concentration
+                    FROM plant_details
+                    GROUP BY id, name
+                )
+                SELECT 
+                    id,
+                    name,
+                    details,
+                    metabolites_count,
+                    total_concentration,
+                    COUNT(*) OVER() as total_count,
+                    CASE WHEN total_concentration IS NULL THEN 1 ELSE 0 END as has_unknown_concentration
+                FROM plant_summary
+                ORDER BY 
+                    has_unknown_concentration,
+                    CASE 
+                        WHEN total_concentration IS NULL THEN 0 
+                        ELSE 1 
+                    END DESC,
+                    total_concentration DESC
+                LIMIT %s OFFSET %s
+            """, [self.id, per_page, offset])
+            
+            columns = [col[0] for col in cursor.description]
+            results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+            
+            # Formater les détails pour l'affichage
+            for result in results:
+                if result['details']:
+                    metabolites = {}
+                    for detail in result['details'].split('|'):
+                        try:
+                            parts = detail.split(':')
+                            if len(parts) == 3:
+                                metabolite, part, concentration = parts
+                                if metabolite not in metabolites:
+                                    metabolites[metabolite] = []
+                                if concentration == 'NULL' or not concentration:
+                                    concentration_text = 'inconnu'
+                                else:
+                                    try:
+                                        concentration_text = f"{float(concentration):.1f}"
+                                    except ValueError:
+                                        concentration_text = 'inconnu'
+                                metabolites[metabolite].append(f"{part}: {concentration_text}")
+                        except Exception:
+                            continue  # Skip les détails mal formatés
+                    
+                    result['metabolites_details'] = [
+                        {'name': name, 'parts': parts}
+                        for name, parts in metabolites.items()
+                    ]
+            
+            total_count = results[0]['total_count'] if results else 0
+            
+            return {
+                'results': results,
+                'total_count': total_count,
+                'page': page,
+                'per_page': per_page,
+                'total_pages': (total_count + per_page - 1) // per_page
+            }
+
 class Plant(models.Model):
     name = models.CharField(max_length=200, db_index=True)
 

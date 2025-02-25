@@ -1,10 +1,13 @@
 {% extends "main/base.html" %}
 
 {% block content %}
-<div class="container mx-auto px-4 py-8 max-w-4xl">
+<div class="container mx-auto px-4 py-8 max-w-6xl">
     <!-- En-tête de l'activité -->
     <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
-        <h1 class="text-3xl font-bold text-center text-gray-800 mb-4">
+        <p class="text-gray-500 text-md mb-2 text-center font-light uppercase">
+            Activité
+        </p>
+        <h1 class="text-3xl font-bold text-center text-green-700 mb-4">
             {{ activity.name }}
         </h1>
         <div class="flex gap-8 justify-center items-center py-5">
@@ -17,10 +20,10 @@
 
     <!-- Section Métabolites -->
     <div class="bg-white rounded-lg shadow-lg p-6">
-        <h2 class="text-2xl font-bold text-gray-800 mb-6 flex items-center">
-            <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
-            </svg>
+        <h2 class="text-2xl font-bold text-green-600 mb-6 flex items-center ">
+            <span>
+                <i class="fa-solid fa-flask mr-2"></i>
+            </span>
             Métabolites associés
         </h2>
         <div class="overflow-x-auto">
@@ -35,14 +38,16 @@
                 <tbody class="bg-white divide-y divide-gray-200">
                     {% for metabolite in metabolites %}
                     <tr class="hover:bg-gray-50 cursor-pointer" onclick="window.location='{% url 'metabolite_detail' metabolite.metabolite.id %}'">
-                        <td class="px-6 py-4 text-wrap text-sm font-medium text-gray-900">
-                            {{ forloop.counter|add:start_number }}. {{ metabolite.metabolite.name }}
+                        <td class="px-6 py-4 text-nowrap text-sm font-medium text-gray-900">
+                            {{ forloop.counter|add:start_number }}. <span class="text-green-600">{{ metabolite.metabolite.name }}</span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             {{ metabolite.dosage }}
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-blue-600 hover:text-blue-800">
-                            {{ metabolite.reference }}
+                        <td class="px-6 py-4 text-sm text-green-600 hover:text-green-800 truncate max-w-md">
+                            <div class="tooltip relative">
+                                <span class="truncate block" title="{{ metabolite.reference }}">{{ metabolite.reference }}</span>
+                            </div>
                         </td>
                     </tr>
                     {% empty %}
@@ -54,33 +59,165 @@
             </table>
         </div>
 
+        <!-- Pagination stylisée -->
+        {% if metabolite_page_count > 1 %}
+        <div class="mt-6 flex justify-center">
+            <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                {% if metabolites.has_previous %}
+                    <a href="?metabolites_page=1{% if query_params %}&{{ query_params }}{% endif %}" class="relative inline-flex items-center px-4 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                        Première
+                    </a>
+                    <a href="?metabolites_page={{ metabolites.previous_page_number }}{% if query_params %}&{{ query_params }}{% endif %}" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                        Précédente
+                    </a>
+                {% endif %}
 
-              <!-- Pagination stylisée -->
-              <div class="mt-6 flex justify-center">
-                <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
-                    {% if metabolites.has_previous %}
-                        <a href="?page=1" class="relative inline-flex items-center px-4 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
-                            Première
-                        </a>
-                        <a href="?page={{ metabolites.previous_page_number }}" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
-                            Précédente
-                        </a>
-                    {% endif %}
-    
-                    <span class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-green-600 text-sm font-medium text-white">
-                        Page {{ metabolites.number }} sur {{ metabolites.paginator.num_pages }}
-                    </span>
-    
-                    {% if metabolites.has_next %}
-                        <a href="?page={{ metabolites.next_page_number }}" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
-                            Suivante
-                        </a>
-                        <a href="?page={{ metabolites.paginator.num_pages }}" class="relative inline-flex items-center px-4 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
-                            Dernière
-                        </a>
-                    {% endif %}
-                </nav>
-            </div>
+                <span class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-green-600 text-sm font-medium text-white">
+                    Page {{ metabolites.number }} sur {{ metabolites.paginator.num_pages }}
+                </span>
+
+                {% if metabolites.has_next %}
+                    <a href="?metabolites_page={{ metabolites.next_page_number }}{% if query_params %}&{{ query_params }}{% endif %}" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                        Suivante
+                    </a>
+                    <a href="?metabolites_page={{ metabolites.paginator.num_pages }}{% if query_params %}&{{ query_params }}{% endif %}" class="relative inline-flex items-center px-4 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                        Dernière
+                    </a>
+                {% endif %}
+            </nav>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Après le tableau des métabolites -->
+    <div class="bg-white rounded-lg shadow-lg p-6 mt-8">
+        <h2 class="text-2xl font-bold text-green-600 mb-6 flex items-center">
+            <span>
+                <i class="fa-solid fa-leaf mr-2"></i>
+            </span>
+            Plantes par concentration totale
+        </h2>
+        <div class="overflow-x-auto">
+            <table class="min-w-full table-auto">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Plante</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre de métabolites</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Concentration totale (%)</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for plant in plants_by_concentration.results %}
+                    <tr class="hover:bg-gray-50 cursor-pointer group relative" onclick="window.location='{% url 'plant_detail' plant.id %}';">
+                        <td class="px-6 py-4 text-wrap text-sm font-medium text-gray-900">
+                            <span class="text-gray-600 text-xs font-light">{{ forloop.counter|add:concentration_start }}.</span> <span class="text-green-600">{{ plant.name }}</span>
+                            <!-- Tooltip modifié -->
+                            <div class="hidden group-hover:block absolute left-0 z-50 w-96 p-4 bg-white border border-gray-200 rounded-lg shadow-lg transform -translate-y-1/2 top-1/2">
+                                <h3 class="font-bold text-lg mb-2">Détails des métabolites</h3>
+                                {% for metabolite in plant.metabolites_details %}
+                                <div class="mb-3">
+                                    <p class="font-semibold text-gray-800">{{ metabolite.name }}</p>
+                                    <ul class="ml-4 text-sm text-gray-600">
+                                        {% for part in metabolite.parts %}
+                                        <li>• {{ part }}</li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ plant.metabolites_count }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {% if plant.has_unknown_concentration %}
+                                Concentration inconnue
+                            {% else %}
+                                {{ plant.total_concentration|floatformat:1 }}
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="3" class="px-6 py-4 text-center text-gray-500 italic">Aucune plante trouvée</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination pour les plantes par concentration -->
+        {% if plants_by_concentration.total_pages > 1 %}
+        <div class="mt-6 flex justify-center">
+            <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                {% if plants_by_concentration.page > 1 %}
+                    <a href="?concentration_page=1{% if query_params %}&{{ query_params }}{% endif %}" 
+                       class="relative inline-flex items-center px-4 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                        Première
+                    </a>
+                    <a href="?concentration_page={{ plants_by_concentration.page|add:"-1" }}{% if query_params %}&{{ query_params }}{% endif %}" 
+                       class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                        Précédente
+                    </a>
+                {% endif %}
+
+                <span class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-green-600 text-sm font-medium text-white">
+                    Page {{ plants_by_concentration.page }} sur {{ plants_by_concentration.total_pages }}
+                </span>
+
+                {% if plants_by_concentration.page < plants_by_concentration.total_pages %}
+                    <a href="?concentration_page={{ plants_by_concentration.page|add:"1" }}{% if query_params %}&{{ query_params }}{% endif %}" 
+                       class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                        Suivante
+                    </a>
+                    <a href="?concentration_page={{ plants_by_concentration.total_pages }}{% if query_params %}&{{ query_params }}{% endif %}" 
+                       class="relative inline-flex items-center px-4 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                        Dernière
+                    </a>
+                {% endif %}
+            </nav>
+        </div>
+        {% endif %}
     </div>
 </div>
+
+<!-- Ajouter dans le head ou dans un bloc style -->
+<style>
+    .tooltip-transition {
+        transition: opacity 0.15s ease-in-out;
+        opacity: 0;
+    }
+    
+    .group:hover .tooltip-transition {
+        opacity: 1;
+    }
+
+    /* Ajout de styles pour gérer le débordement */
+    .overflow-x-auto {
+        overflow: visible !important;
+    }
+    
+    table {
+        position: relative;
+    }
+
+    /* Ajustement pour la colonne de référence */
+    .max-w-md {
+        max-width: 28rem;
+    }
+
+    /* Style pour afficher le texte complet au survol */
+    .tooltip:hover span {
+        position: absolute;
+        white-space: normal;
+        background-color: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 0.375rem;
+        padding: 0.5rem;
+        z-index: 50;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        width: max-content;
+        max-width: 400px;
+    }
+</style>
 {% endblock %} 

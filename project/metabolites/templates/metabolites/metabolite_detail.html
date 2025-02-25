@@ -5,8 +5,13 @@
 <div class="container mx-auto px-4 py-8 max-w-4xl">
     <!-- En-tête du métabolite -->
     <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
-        <h1 class="text-3xl font-bold text-center text-gray-800 mb-4">
-            {{ metabolite.name }}
+        <h1 class="text-3xl font-bold text-center text-green-700 mb-4">
+            <span>
+                <i class="fa-solid fa-flask-vial mr-2"></i>
+            </span>
+            <span class="">
+                {{ metabolite.name }}
+            </span>
         </h1>
         <div class="text-center">
             <span class="inline-flex items-center px-3 py-1 rounded-full {% if metabolite.is_ubiquitous %}bg-green-100 text-green-800{% else %}bg-gray-100 text-gray-800{% endif %}">
@@ -27,14 +32,14 @@
 
     <!-- Section Activités -->
     <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
-        <h2 class="text-2xl font-bold text-gray-800 mb-6 flex items-center">
-            <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
-            </svg>
+        <h2 class="text-2xl font-bold text-green-700 mb-6 flex items-center">
+           <span>
+            <i class="fa-solid fa-microscope mr-2"></i>
+           </span>
             Activités
         </h2>
         <div class="grid gap-4">
-            {% for activity in metabolite.activities.all %}
+            {% for activity in activities %}
             <a href="{% url 'activity_detail' activity.activity.id %}">
             <div class="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -48,7 +53,7 @@
                     </div>
                     <div class="flex items-center">
                         <span class="font-semibold text-gray-700">Référence:</span>
-                        <span class="ml-2 text-blue-600 hover:text-blue-800">{{ activity.reference }}</span>
+                        <span class="ml-2 text-green-600 hover:text-green-800 line-clamp-1">{{ activity.reference }}</span>
                     </div>
                 </div>
             </div>
@@ -56,15 +61,44 @@
             {% empty %}
             <p class="text-gray-500 text-center italic">Aucune activité enregistrée</p>
             {% endfor %}
+
+            <!-- PAGINATION -->
+             {% if activities_page_count > 1 %}
+            <div class="mt-6 flex justify-center">
+                <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                    {% if activities.has_previous %}
+                        <a href="?activities_page=1" class="relative inline-flex items-center px-4 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                            Première
+                        </a>
+                        <a href="?activities_page={{ activities.previous_page_number }}" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                            Précédente
+                        </a>
+                    {% endif %}
+                    
+                    <span class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-green-600 text-sm font-medium text-white">
+                        Page {{ activities.number }} sur {{ activities.paginator.num_pages }}
+                    </span>
+                    
+                    {% if activities.has_next %}
+                        <a href="?activities_page={{ activities.next_page_number }}" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">   
+                            Suivante
+                        </a>
+                        <a href="?activities_page={{ activities.paginator.num_pages }}" class="relative inline-flex items-center px-4 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                            Dernière
+                        </a>
+                    {% endif %}
+                </nav>
+            </div>
+            {% endif %}
         </div>
     </div>
 
     <!-- Section Plantes -->
     <div class="bg-white rounded-lg shadow-lg p-6">
-        <h2 class="text-2xl font-bold text-gray-800 mb-6 flex items-center">
-            <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
-            </svg>
+        <h2 class="text-2xl font-bold text-green-700 mb-6 flex items-center">
+            <span>
+                <i class="fa-solid fa-leaf mr-2"></i>
+            </span>
             Plantes
         </h2>
         <div class="overflow-x-auto">
@@ -80,16 +114,21 @@
                     </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
-                    {% for plant in metabolite.get_plants_with_parts %}
+                    {% for plant in plants %}
                     <tr class="hover:bg-gray-50">
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600 hover:text-blue-800 cursor-pointer">
-                            <a href="{% url 'plant_detail' plant.plant_id %}">{{ plant.plant_name }}</a>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600 hover:text-green-800 cursor-pointer">
+                            <a href="{% url 'plant_detail' plant.plant_id %}">
+                                <span class="text-gray-600 text-xs font-light">{{ forloop.counter|add:plants_start_number }}.</span> 
+                                <span class="text-green-600">{{ plant.plant_name }}</span>
+                            </a>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ plant.plant_part }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ plant.low }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ plant.high }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ plant.deviation }}</td>
-                        <td class="px-6 py-4 text-wrap text-sm text-blue-600 hover:text-blue-800">{{ plant.reference }}</td>
+                        <td class="px-6 py-4 text-wrap text-sm text-green-600 hover:text-green-800 line-clamp-1">
+                            <span class="truncate block" title="{{ plant.reference }}">{{ plant.reference }}</span>
+                        </td>
                     </tr>
                     {% empty %}
                     <tr>
@@ -99,6 +138,32 @@
                 </tbody>
             </table>
         </div>
+        <!-- PAGINATION -->
+        {% if plants_page_count > 1 %}
+        <div class="mt-6 flex justify-center">
+            <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                {% if plants.has_previous %}
+                    <a href="?plants_page=1" class="relative inline-flex items-center px-4 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                        Première
+                    </a>
+                    <a href="?plants_page={{ plants.previous_page_number }}" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                        Précédente
+                    </a>
+                {% endif %}
+                <span class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-green-600 text-sm font-medium text-white">
+                    Page {{ plants.number }} sur {{ plants.paginator.num_pages }}
+                </span>
+                {% if plants.has_next %}
+                    <a href="?plants_page={{ plants.next_page_number }}" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                        Suivante
+                    </a>
+                    <a href="?plants_page={{ plants.paginator.num_pages }}" class="relative inline-flex items-center px-4 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                        Dernière
+                    </a>
+                {% endif %}
+            </nav>
+        </div>
+        {% endif %}
     </div>
 </div>
 {% endblock %}

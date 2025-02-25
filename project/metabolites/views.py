@@ -12,9 +12,33 @@ logger = logging.getLogger('metabolites')
 @login_required
 def metabolite_detail(request, id):
     metabolite = get_object_or_404(Metabolite, id=id)
+    activities = metabolite.activities.all()
+
+    count_per_page = 20
+    paginator = Paginator(activities, count_per_page)
+    activities_page_number = request.GET.get('activities_page', 1)
+    activities = paginator.get_page(activities_page_number)
+    activities_page_count = paginator.num_pages
+    activities_start_number = (int(activities_page_number) - 1) * count_per_page
+
+    plants = metabolite.get_plants_with_parts()
+    paginator = Paginator(plants, count_per_page)
+    plants_page_number = request.GET.get('plants_page', 1)
+    plants = paginator.get_page(plants_page_number)
+    plants_page_count = paginator.num_pages
+    plants_start_number = (int(plants_page_number) - 1) * count_per_page
 
     context = {
-        'metabolite': metabolite
+        'metabolite': metabolite,
+        'activities': activities,
+        'count_per_page': count_per_page,
+        'activities_page_number': activities_page_number,
+        'activities_page_count': activities_page_count,
+        'plants': plants,
+        'plants_page_number': plants_page_number,
+        'plants_page_count': plants_page_count,
+        'plants_start_number': plants_start_number,
+        'activities_start_number': activities_start_number,
     }
 
     return render(request, 'metabolites/metabolite_detail.html', context)
@@ -106,17 +130,20 @@ def all_metabolites(request):
         metabolites_list = metabolites_list.order_by('-plants_count')
 
     # Pagination
-    paginator = Paginator(metabolites_list, 50)
+    count_by_page = 50
+    paginator = Paginator(metabolites_list, count_by_page)
     try:
         page_number = int(request.GET.get('page', 1))
     except (ValueError, TypeError):
         page_number = 1
     
-    start_number = (page_number - 1) * 50
+    start_number = (page_number - 1) * count_by_page
     metabolites = paginator.get_page(page_number)
     
     context = {
         'metabolites': metabolites,
+        'count_by_page': count_by_page,
+        'start_number': start_number,
     }
 
     return render(request, 'metabolites/all_metabolites.html', context)
@@ -134,7 +161,7 @@ def plant_detail(request, plant_id):
     metabolites_list = plant.get_metabolites_with_parts()
     
     # Pagination des métabolites
-    count_by_page = 50
+    count_by_page = 20
     metabolites_paginator = Paginator(metabolites_list, count_by_page)
     metabolites_page = request.GET.get('metabolites_page', 1)
     metabolites = metabolites_paginator.get_page(metabolites_page)
@@ -218,12 +245,18 @@ def all_activities(request):
         activities_list = activities_list.order_by('-metabolites_count')
 
     # Pagination
-    paginator = Paginator(activities_list, 50)
-    page_number = request.GET.get('page')
+    count_by_page = 50
+    paginator = Paginator(activities_list, count_by_page)
+    page_number = request.GET.get('page', 1)
     activities_list = paginator.get_page(page_number)
-    
+    start_number = (int(page_number) - 1) * count_by_page
+    page_count = paginator.count
+    print(f"Nombre de pages: {page_count}")
     context = {
         'activities': activities_list,
+        'count_by_page': count_by_page,
+        'start_number': start_number,
+        'page_count': page_count,
     }
 
     return render(request, 'metabolites/all_activities.html', context)
@@ -233,37 +266,38 @@ def all_activities(request):
 def activity_detail(request, activity_id):
     activity = get_object_or_404(Activity, id=activity_id)
 
-    # Récupération des paramètres
-    search = request.GET.get('search')
-    sort = request.GET.get('sort', 'name_asc')
-
-    # Requête de base pour les métabolites de cette activité
-    metabolites_list = activity.metaboliteactivity_set.all()
-
-    # Appliquer la recherche si nécessaire
-    if search:
-        metabolites_list = metabolites_list.filter(metabolite__name__icontains=search)
-
-    # Appliquer le tri
-    if sort == 'name_asc':
-        metabolites_list = metabolites_list.order_by('metabolite__name')
-    elif sort == 'name_desc':
-        metabolites_list = metabolites_list.order_by('-metabolite__name')
-
-    # Pagination
-    paginator = Paginator(metabolites_list, 50)
-    try:
-        page_number = int(request.GET.get('page', 1))
-    except (ValueError, TypeError):
-        page_number = 1
+    count_per_page = 20
     
-    start_number = (page_number - 1) * 50
-    metabolites = paginator.get_page(page_number)
+    # Pagination des métabolites
+    metabolites_page = request.GET.get('metabolites_page', 1)
+    metabolites_list = activity.metaboliteactivity_set.all()
+    metabolites_paginator = Paginator(metabolites_list, count_per_page)
+    metabolites = metabolites_paginator.get_page(metabolites_page)
+    metabolite_page_count = metabolites_paginator.num_pages
+    print(f"Nombre de pages: {metabolite_page_count}")
+
+    # Pagination des plantes par concentration - on garde la pagination SQL
+    concentration_page = int(request.GET.get('concentration_page', 1))
+    plants_by_concentration = activity.get_plants_by_total_concentration(
+        page=concentration_page,
+        per_page=count_per_page
+    )
+    
+    # Paramètres pour la pagination
+    query_params = request.GET.copy()
+    if 'metabolites_page' in query_params:
+        del query_params['metabolites_page']
+    if 'concentration_page' in query_params:
+        del query_params['concentration_page']
     
     context = {
         'activity': activity,
         'metabolites': metabolites,
-        'start_number': start_number,
+        'start_number': (int(metabolites_page) - 1) * count_per_page,
+        'plants_by_concentration': plants_by_concentration,
+        'concentration_start': (concentration_page - 1) * count_per_page,
+        'query_params': query_params.urlencode(),
+        'metabolite_page_count': metabolite_page_count,
     }
     
     return render(request, 'metabolites/activity_detail.html', context)
