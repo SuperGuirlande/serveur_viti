@@ -110,109 +110,51 @@ def all_metabolites(request):
     sort = request.GET.get('sort', 'name_asc')
     page_number = int(request.GET.get('page', 1))
     count_by_page = 20
-    offset = (page_number - 1) * count_by_page
 
     logger.debug(f"Paramètres reçus - search: {search}, sort: {sort}")
     
-    with connection.cursor() as cursor:
-        # 1. D'abord, on obtient juste les IDs des métabolites paginés
-        base_query = """
-            SELECT m.id
-            FROM metabolites_metabolite m
-            WHERE 1=1
-        """
-        params = []
-        
-        if search:
-            base_query += " AND m.name LIKE %s"
-            params.append(f"%{search}%")
-            
-        # Comptage total pour la pagination
-        count_query = f"SELECT COUNT(*) FROM ({base_query}) as count_table"
-        cursor.execute(count_query, params)
-        total_count = cursor.fetchone()[0]
-        
-        # Tri et pagination pour obtenir les IDs
-        sort_mapping = {
-            'name_asc': 'm.name ASC',
-            'name_desc': 'm.name DESC'
-        }
-        order_by = sort_mapping.get(sort, 'm.name ASC')
-        
-        id_query = f"""
-            {base_query}
-            ORDER BY {order_by}
-            LIMIT %s OFFSET %s
-        """
-        
-        cursor.execute(id_query, params + [count_by_page, offset])
-        metabolite_ids = [row[0] for row in cursor.fetchall()]
-        
-        if not metabolite_ids:
-            return render(request, 'metabolites/all_metabolites.html', {
-                'metabolites': [],
-                'page': {'number': page_number, 'num_pages': 0},
-                'count_by_page': count_by_page,
-                'start_number': offset,
-                'current_sort': sort,
-                'current_search': search,
-                'total_count': 0
-            })
-        
-        # 2. Ensuite, on récupère les détails complets seulement pour ces IDs
-        placeholders = ','.join(['%s'] * len(metabolite_ids))
-        details_query = f"""
-            SELECT 
-                m.id,
-                m.name,
-                m.is_ubiquitous,
-                COUNT(DISTINCT ma.activity_id) as activities_count,
-                COUNT(DISTINCT mp.plant_name) as plants_count
-            FROM metabolites_metabolite m
-            LEFT JOIN metabolites_metaboliteactivity ma ON m.id = ma.metabolite_id
-            LEFT JOIN metabolites_metaboliteplant mp ON m.id = mp.metabolite_id
-            WHERE m.id IN ({placeholders})
-            GROUP BY m.id, m.name, m.is_ubiquitous
-        """
-        
-        start_time = time.time()
-        cursor.execute(details_query, metabolite_ids)
-        logger.info(f"Temps de la requête principale: {time.time() - start_time:.2f} secondes")
-        
-        columns = [col[0] for col in cursor.description]
-        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
-        
-        # Tri final des résultats si nécessaire
-        if sort in ['activities_asc', 'activities_desc']:
-            results.sort(
-                key=lambda x: (x['activities_count'], x['name']),
-                reverse=(sort == 'activities_desc')
-            )
-        elif sort in ['plants_asc', 'plants_desc']:
-            results.sort(
-                key=lambda x: (x['plants_count'], x['name']),
-                reverse=(sort == 'plants_desc')
-            )
-
-    # Création de l'objet de pagination
-    has_next = (offset + count_by_page) < total_count
-    has_previous = page_number > 1
+    # Utilisation de Django ORM pour annoter les champs nécessaires
+    metabolites = Metabolite.objects.annotate(
+        activities_count=Count('activities', distinct=True),
+        plants_count=Count('plants', distinct=True)
+    )
+    
+    if search:
+        metabolites = metabolites.filter(name__icontains=search)
+    
+    # Mapping de tri
+    sort_mapping = {
+        'name_asc': 'name',
+        'name_desc': '-name',
+        'activities_asc': 'activities_count',
+        'activities_desc': '-activities_count',
+        'plants_asc': 'plants_count',
+        'plants_desc': '-plants_count'
+    }
+    order_by = sort_mapping.get(sort, 'name')
+    
+    # Appliquer le tri
+    metabolites = metabolites.order_by(order_by)
+    
+    # Pagination
+    paginator = Paginator(metabolites, count_by_page)
+    metabolites_page = paginator.get_page(page_number)
     
     context = {
-        'metabolites': results,
+        'metabolites': metabolites_page,
         'page': {
-            'has_next': has_next,
-            'has_previous': has_previous,
-            'next_page_number': page_number + 1 if has_next else None,
-            'previous_page_number': page_number - 1 if has_previous else None,
+            'has_next': metabolites_page.has_next(),
+            'has_previous': metabolites_page.has_previous(),
+            'next_page_number': metabolites_page.next_page_number() if metabolites_page.has_next() else None,
+            'previous_page_number': metabolites_page.previous_page_number() if metabolites_page.has_previous() else None,
             'number': page_number,
-            'num_pages': (total_count + count_by_page - 1) // count_by_page
+            'num_pages': paginator.num_pages
         },
         'count_by_page': count_by_page,
-        'start_number': offset,
+        'start_number': (page_number - 1) * count_by_page,
         'current_sort': sort,
         'current_search': search,
-        'total_count': total_count
+        'total_count': paginator.count
     }
     
     logger.info("Fin de la vue all_metabolites")
