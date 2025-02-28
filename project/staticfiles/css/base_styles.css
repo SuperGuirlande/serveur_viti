@@ -1,0 +1,8 @@
+:root {
+    --font-poppins: 'Poppins', sans-serif;
+}
+
+.font-poppins {
+    font-family: var(--font-poppins);
+}
+

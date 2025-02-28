@@ -1,0 +1,388 @@
+{% extends "main/base.html" %}
+
+{% block title %}
+Sélection des plantes - Base de données interactive
+{% endblock %}
+
+{% block extra_head %}
+<style>
+    .activity-section {
+        margin-bottom: 1.5rem;
+    }
+
+    .plant-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .plant-table th {
+        background-color: #3b7e4610;
+        color: #3b7e46;
+        text-align: left;
+        padding: 1rem 1.5rem;
+        font-weight: 600;
+    }
+
+    .plant-table tr {
+        border-bottom: 1px solid #3b7e4620;
+        transition: all 0.3s ease-in-out;
+    }
+
+    .plant-table tr.selected-elsewhere {
+        background-color: #f3f4f6;
+        opacity: 0.5;
+    }
+
+    .plant-table tr.selected-elsewhere label {
+        cursor: not-allowed;
+    }
+
+    .plant-table td {
+        padding: 1rem 1.5rem;
+    }
+
+    .plant-checkbox {
+        width: 1.25rem;
+        height: 1.25rem;
+        color: #3b7e46;
+        border-color: #3b7e46;
+        border-radius: 0.25rem;
+    }
+
+    .concentration-badge {
+        padding: 0.5rem 1rem;
+        border-radius: 0.25rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+    }
+
+    .concentration-high {
+        background-color: #3b7e4610;
+        color: #3b7e46;
+    }
+
+    .concentration-medium {
+        background-color: #3b7e4610;
+        color: #3b7e46;
+    }
+
+    .concentration-low {
+        background-color: #3b7e4610;
+        color: #3b7e46;
+    }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const checkboxes = document.querySelectorAll('.plant-checkbox');
+    const plantRows = {};
+    const allPlantsData = JSON.parse('{{ all_plants_data_json|safe }}');
+    const activities = JSON.parse('{{ activities_json|safe }}');
+    const recapSection = document.getElementById('selected-plants-recap');
+
+    // Fonction pour formater la concentration
+    function formatConcentration(concentration) {
+        if (concentration === null || concentration === undefined) {
+            return 'Non spécifiée';
+        }
+        return parseFloat(concentration).toFixed(2);
+    }
+
+    function updateRecap() {
+        const selectedPlants = new Set();
+        
+        // Collecter les plantes sélectionnées
+        checkboxes.forEach(checkbox => {
+            if (checkbox.checked) {
+                selectedPlants.add(checkbox.value);
+            }
+        });
+
+        // Générer le HTML du récapitulatif
+        let recapHTML = '';
+        
+        if (selectedPlants.size === 0) {
+            recapHTML = '<p class="text-gray-500 italic">Aucune plante sélectionnée</p>';
+        } else {
+            // Ajouter l'en-tête du tableau
+            recapHTML = `
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-green-200">
+                        <thead>
+                            <tr>
+                                <th class="px-6 py-3 bg-green-50 text-left text-xs font-medium text-green-700 uppercase tracking-wider">
+                                    Plante
+                                </th>
+                                ${activities.map(activity => `
+                                    <th class="px-6 py-3 bg-green-50 text-left text-xs font-medium text-green-700 uppercase tracking-wider">
+                                        ${activity}
+                                    </th>
+                                `).join('')}
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-green-200">
+            `;
+
+            // Ajouter une ligne pour chaque plante sélectionnée
+            selectedPlants.forEach(plantId => {
+                const plantData = allPlantsData[plantId];
+                recapHTML += `
+                    <tr class="hover:bg-green-50">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-700">
+                            ${plantData.name}
+                        </td>
+                        ${activities.map(activity => {
+                            const activityData = plantData.activities[activity] || {};
+                            return `
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <div class="text-sm text-gray-900">
+                                        <div class="font-medium">
+                                            Concentration: ${formatConcentration(activityData.concentration)}
+                                        </div>
+                                        <div class="text-gray-500">
+                                            ${activityData.metabolites_count || '0'} métabolite(s)
+                                        </div>
+                                    </div>
+                                </td>
+                            `;
+                        }).join('')}
+                    </tr>
+                `;
+            });
+
+            recapHTML += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+        
+        recapSection.innerHTML = recapHTML;
+    }
+
+    // Fonction pour mettre à jour l'état des autres instances de la même plante
+    function updatePlantInstances(plantId, isChecked) {
+        plantRows[plantId].forEach(row => {
+            const checkbox = row.querySelector('.plant-checkbox');
+            if (isChecked) {
+                if (!checkbox.checked) {
+                    row.classList.add('selected-elsewhere');
+                    checkbox.disabled = true;
+                }
+            } else {
+                row.classList.remove('selected-elsewhere');
+                checkbox.disabled = false;
+            }
+        });
+        updateRecap();
+    }
+
+    // Initialiser le mapping des lignes
+    checkboxes.forEach(checkbox => {
+        const plantId = checkbox.value;
+        if (!plantRows[plantId]) {
+            plantRows[plantId] = [];
+        }
+        plantRows[plantId].push(checkbox.closest('tr'));
+    });
+
+    // Gérer les plantes déjà sélectionnées au chargement
+    checkboxes.forEach(checkbox => {
+        if (checkbox.checked) {
+            updatePlantInstances(checkbox.value, true);
+        }
+    });
+
+    // Ajouter les écouteurs d'événements pour les changements
+    checkboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            const plantId = this.value;
+            updatePlantInstances(plantId, this.checked);
+        });
+    });
+
+    // Initialiser le récapitulatif
+    updateRecap();
+});
+</script>
+{% endblock %}
+
+{% block content %}
+<!-- Hero Section -->
+<section class="relative min-h-[40vh] bg-gradient-to-b from-green-900 to-green-700 flex flex-col items-center poppins">
+    <!-- Overlay pattern -->
+    <div class="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0zNiAzNGM0LjQxOCAwIDgtMy41ODIgOC04cy0zLjU4Mi04LTgtOC04IDMuNTgyLTggOCAzLjU4MiA4IDggOHoiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii4xIi8+PC9nPjwvc3ZnPg==')] opacity-10"></div>
+
+    <!-- Contenu du hero -->
+    <div class="relative z-10 container mx-auto px-4 h-full flex flex-col justify-center items-center py-12 my-auto w-fit">
+        <a href="{% url 'create_remede' %}" class="text-white hover:text-green-500 text-xs flex items-center gap-2 text-left self-start group">
+            <i class="fa-solid fa-arrow-left group-hover:-translate-x-1 transition-all duration-300"></i>
+            <p class="group-hover:translate-x-1 transition-all duration-300">Retour</p>
+        </a>
+        <h1 class="text-4xl md:text-5xl font-bold text-white mb-4 flex items-center gap-2 mx-auto">
+            <span><i class="fa-solid fa-leaf"></i></span>
+            <span>Sélection des plantes</span>
+        </h1>
+        <p class="text-lg text-gray-100 max-w-2xl text-center">
+            Sélectionnez les plantes pour votre remède "{{ remede.name }}"
+        </p>
+    </div>
+
+    <!-- Vague décorative -->
+    <div class="absolute -bottom-1 left-0 right-0">
+        <svg class="w-full scale-110 h-24 fill-white" viewBox="0 0 1440 74" xmlns="http://www.w3.org/2000/svg">
+            <path d="M0,32L60,37.3C120,43,240,53,360,53.3C480,53,600,43,720,42.7C840,43,960,53,1080,53.3C1200,53,1320,43,1380,37.3L1440,32L1440,74L1380,74C1320,74,1200,74,1080,74C960,74,840,74,720,74C600,74,480,74,360,74C240,74,120,74,60,74L0,74Z"></path>
+        </svg>
+    </div>
+</section>
+
+<!-- Résumé du remède -->
+<section class="w-full px-4 py-12">
+    <div class="max-w-7xl mx-auto">
+        <div class="bg-white shadow-md rounded-lg p-6">
+            <h2 class="text-2xl font-bold text-green-700 flex gap-5">
+                <span>
+                    <i class="fa-solid fa-book-open"></i>
+                </span>
+                <span>
+                    Résumé du remède
+                </span>
+            </h2>
+            <!-- Nom du remède -->
+            <div class="flex gap-2 items-center text-lg font-bold text-green-700 mt-7">
+                <i class="fa-solid fa-pen-to-square"></i> 
+                <h3 class=" flex gap-2">Nom du remède</h3>
+            </div>
+            <p class="text-gray-600 mt-2">{{ remede.name }}</p>
+            <!-- Description -->
+            {% if remede.description %}
+            <div class="flex gap-2 items-center text-lg font-bold text-green-700 mt-5">
+                <i class="fa-solid fa-pen-to-square"></i> 
+                <h3 class=" flex gap-2">Description</h3>
+            </div>
+            <p class="text-gray-600 mt-2">{{ remede.description }}</p>
+            {% endif %}
+            <!-- APlante ciblée -->
+            <div class="flex gap-2 items-center text-lg font-bold text-green-700 mt-5">
+                <i class="fa-solid fa-leaf"></i> 
+                <h3 class=" flex gap-2">Plante ciblée</h3>
+            </div>
+            <p class="text-gray-600 mt-2">{{ remede.target_plant.name }}</p>
+
+            <!-- Activités recherchées -->
+            <div class="flex gap-2 items-center text-lg font-bold text-green-700 mt-5">
+                <i class="fa-solid fa-flask"></i> 
+                <h3 class=" flex gap-2">Activités recherchées</h3>
+            </div>
+            <ul class="list-disc list-inside text-gray-600 mt-2">
+                {% for activity in remede.activities.all %}
+                <li>{{ activity.name }}</li>
+                {% endfor %}    
+            </ul>
+        </div>
+
+        <!-- Bouton modifier les infos -->
+        <div class="flex justify-start mt-5">
+            <a href="{% url 'edit_remede' remede.id %}" class="bg-green-700 hover:bg-green-800 text-white px-6 py-3 rounded-lg shadow-md hover:shadow-lg transition-all duration-300 flex items-center gap-2">
+                <i class="fa-solid fa-pen-to-square"></i>
+                Modifier les infos
+            </a>
+        </div>
+    </div>
+</section>
+
+<!-- Form Section -->
+<section class="w-full px-4 py-12">
+    <div class="max-w-7xl mx-auto">
+        <form method="POST" class="space-y-12">
+            {% csrf_token %}
+            
+            {% for activity, plants in plants_by_activity.items %}
+            <div class="activity-section">
+                <div class="flex items-center gap-3 mb-6">
+                    <h2 class="text-2xl font-bold text-green-700">
+                        <i class="fa-solid fa-flask"></i>
+                        Plantes pour l'activité : {{ activity }}
+                    </h2>
+                </div>
+                
+                <div class="overflow-x-auto">
+                    <table class="plant-table">
+                        <thead>
+                            <tr>
+                                <th class="w-16">Sélection</th>
+                                <th>Nom de la plante</th>
+                                <th>Concentration totale</th>
+                                <th>Nombre de métabolites</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for plant in plants %}
+                            <tr>
+                                <td class="text-center">
+                                    <input type="checkbox" 
+                                           name="selected_plants" 
+                                           value="{{ plant.id }}" 
+                                           id="plant_{{ plant.id }}"
+                                           {% if plant.id in selected_plants_ids %}checked{% endif %}
+                                           class="plant-checkbox">
+                                </td>
+                                <td>
+                                    <label for="plant_{{ plant.id }}" class="font-medium text-green-700 hover:text-green-800 cursor-pointer">
+                                        {{ plant.name }}
+                                    </label>
+                                </td>
+                                <td>
+                                    {% if plant.total_concentration %}
+                                        <span class="concentration-badge concentration-high">
+                                            {{ plant.total_concentration|floatformat:2 }}
+                                        </span>
+                                    {% else %}
+                                        <span class="concentration-badge concentration-low">
+                                            Non spécifiée
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if plant.metabolites_count %}
+                                        <span class="concentration-badge concentration-medium">
+                                            {{ plant.metabolites_count }} métabolite(s)
+                                        </span>
+                                    {% else %}
+                                        <span class="concentration-badge concentration-low">
+                                            0
+                                        </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endfor %}
+
+            <!-- Récapitulatif des plantes sélectionnées -->
+            <div id="recap-section" class="bg-white shadow-md rounded-lg p-6 mb-8">
+                <h2 class="text-2xl font-bold text-green-700 flex items-center gap-2 mb-6">
+                    <i class="fa-solid fa-list-check"></i>
+                    Récapitulatif des plantes sélectionnées
+                </h2>
+                <div id="selected-plants-recap" class="space-y-6">
+                    <!-- Rempli dynamiquement par JavaScript -->
+                </div>
+            </div>
+
+            <div class="flex justify-center mt-8">
+                <button type="submit" 
+                        class="bg-green-700 hover:bg-green-800 text-white px-6 py-3 rounded-lg 
+                               shadow-md hover:shadow-lg transition-all duration-300 
+                               flex items-center gap-2">
+                    <i class="fa-solid fa-check"></i>
+                    Finaliser le remède
+                </button>
+            </div>
+        </form>
+    </div>
+</section>
+{% endblock %} 

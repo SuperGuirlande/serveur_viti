@@ -17,6 +17,7 @@
     <!-- Contenu du hero -->
     <div class="relative z-10 container mx-auto my-auto px-4 h-full flex flex-col justify-center items-center">
         <div class="max-w-4xl text-center space-y-8">
+            <!-- TITLE -->
             <h1 class="text-4xl md:text-6xl font-extrabold text-white leading-tight">
                 <span class="block">Base de Données</span>
                 <span class="block text-green-300">Agricole Interactive</span>
@@ -26,17 +27,7 @@
                 Explorez notre base de données complète des plantes et leurs métabolites. 
                 Créez des tableaux croisés dynamiques pour analyser les relations entre les espèces végétales et leurs composés chimiques.
             </p>
-
-            <div class="flex flex-col sm:flex-row gap-4 justify-center mt-8 mx-auto">
-                <a href="{% url 'all_metabolites' %}" class="px-8 py-4 bg-white text-green-800 rounded-lg font-semibold hover:bg-green-50 transition-colors duration-200 shadow-lg hover:shadow-xl">
-                    Explorer les métabolites
-                </a>
-                <a href="{% url 'all_plants' %}" class="px-8 py-4 bg-white text-green-800 rounded-lg font-semibold hover:bg-green-50 transition-colors duration-200 shadow-lg hover:shadow-xl">
-                    Explorer les plantes
-                </a>
-    </div>
-
-            <!-- Stats -->
+            <!-- STATS -->
             <div class="grid grid-cols-2 md:grid-cols-3 gap-8 mt-16 mx-auto">
                 <div class="text-center">
                     <div class="text-4xl font-bold text-white">{{ metabolites.count }}</div>
@@ -51,6 +42,30 @@
                     <div class="text-green-300 mt-2">Activités</div>
                 </div>
             </div>
+        </div>
+        <!-- BUTTONS -->
+        <div class="flex flex-col sm:flex-row gap-4 justify-center mt-8 mx-auto">
+            <a href="{% url 'all_metabolites' %}" class="px-5 py-2 bg-white text-green-800 rounded-lg font-semibold hover:bg-green-50 transition-colors duration-200 shadow-lg hover:shadow-xl
+            flex items-center justify-center">
+                <i class="fas fa-flask-vial"></i>
+                <span class="ml-2">Explorer les métabolites</span>
+            </a>
+            <a href="{% url 'all_plants' %}" class="px-5 py-2 bg-white text-green-800 rounded-lg font-semibold hover:bg-green-50 transition-colors duration-200 shadow-lg hover:shadow-xl
+            flex items-center justify-center">
+                <i class="fas fa-leaf"></i>
+                <span class="ml-2">Explorer les plantes</span>
+            </a>
+            <a href="{% url 'all_activities' %}" class="px-5 py-2 bg-white text-green-800 rounded-lg font-semibold hover:bg-green-50 transition-colors duration-200 shadow-lg hover:shadow-xl
+            flex items-center justify-center">
+                <i class="fas fa-microscope"></i>
+                <span class="ml-2">Explorer les activités</span>
+            </a>
+            <a href="{% url 'all_remedes' %}" class="px-5 py-2 bg-white text-green-800 rounded-lg font-semibold hover:bg-green-50 transition-colors duration-200 shadow-lg hover:shadow-xl
+            flex items-center justify-center">
+                <i class="fas fa-capsules"></i>
+                <span class="ml-2">Explorer les remèdes</span>
+            </a>
+
         </div>
     </div>
 
