@@ -16,6 +16,10 @@ def metabolite_detail(request, id):
     metabolite = get_object_or_404(Metabolite, id=id)
     activities = metabolite.activities.all()
 
+    # Récupération des paramètres de tri
+    sort_field = request.GET.get('sort')
+    sort_direction = request.GET.get('direction')
+
     count_per_page = 20
     paginator = Paginator(activities, count_per_page)
     activities_page_number = request.GET.get('activities_page', 1)
@@ -23,7 +27,8 @@ def metabolite_detail(request, id):
     activities_page_count = paginator.num_pages
     activities_start_number = (int(activities_page_number) - 1) * count_per_page
 
-    plants = metabolite.get_plants_with_parts()
+    # Passage des paramètres de tri à get_plants_with_parts
+    plants = metabolite.get_plants_with_parts(sort_field=sort_field, sort_direction=sort_direction)
     paginator = Paginator(plants, count_per_page)
     plants_page_number = request.GET.get('plants_page', 1)
     plants = paginator.get_page(plants_page_number)
@@ -169,21 +174,72 @@ def plant_detail(request, plant_id):
     plant = get_object_or_404(Plant, id=plant_id)
     activity_filter = request.GET.get('activity', None)
     
+    # Récupération des paramètres de tri pour les métabolites
+    sort_params = []
+    for i in range(3):
+        field = request.GET.get(f'sort{i}')
+        direction = request.GET.get(f'direction{i}')
+        if field and direction:
+            sort_params.append((field, direction))
+    
+    # Récupération des paramètres de tri pour les métabolites en commun
+    common_sort_params = []
+    for i in range(4):
+        field = request.GET.get(f'common_sort{i}')
+        direction = request.GET.get(f'common_direction{i}')
+        if field and direction:
+            common_sort_params.append((field, direction))
+    
     logger.debug(f"Récupération des métabolites pour la plante {plant.name}")
     metabolites_list = plant.get_metabolites_with_parts()
+    
+    # Application du tri multiple pour les métabolites
+    if sort_params:
+        def sort_key(item):
+            keys = []
+            for field, direction in sort_params:
+                value = item.get(field)
+                
+                # Gestion des valeurs numériques et nulles
+                if field in ['low', 'high', 'deviation']:
+                    try:
+                        if value is None or value == '-' or value == '':
+                            value = 0.0
+                        else:
+                            value = float(str(value).replace(',', '.'))
+                    except (ValueError, TypeError):
+                        value = 0.0
+                    
+                    if direction == 'desc':
+                        value = -value
+                
+                # Gestion des valeurs textuelles
+                else:
+                    if value is None or value == '-':
+                        value = ''
+                    
+                    if direction == 'desc':
+                        value = tuple(-ord(c) for c in str(value))
+                
+                keys.append(value)
+            return tuple(keys)
+        
+        metabolites_list = sorted(metabolites_list, key=sort_key)
     
     # Pagination des métabolites
     count_by_page = 20
     metabolites_paginator = Paginator(metabolites_list, count_by_page)
     metabolites_page = request.GET.get('metabolites_page', 1)
     metabolites = metabolites_paginator.get_page(metabolites_page)
+    metabolites_start = (int(metabolites_page) - 1) * count_by_page
     
     # Récupère les plantes communes avec pagination SQL
     common_page = int(request.GET.get('common_page', 1))
     common_plants_data = plant.get_common_plants(
         activity_filter=activity_filter,
         page=common_page,
-        per_page=count_by_page
+        per_page=count_by_page,
+        sort_params=common_sort_params  # Passer les paramètres de tri
     )
     
     # Calcul des pourcentages pour les plantes de la page courante
@@ -217,15 +273,17 @@ def plant_detail(request, plant_id):
         'activities': Activity.objects.all(),
         'plant': plant,
         'count_metabolites': plant.all_metabolites_count,
-        'metabolites_start': (int(metabolites_page) - 1) * count_by_page,
-        'common_start': (common_page - 1) * count_by_page,
         'metabolites': metabolites,
+        'metabolites_start': metabolites_start,
+        'common_start': (common_page - 1) * count_by_page,
         'common_plants': common_plants_data,
         'activity_filter': activity_filter,
         'selected_activity': activity_filter,
         'query_params': query_params.urlencode(),
         'count_by_page': count_by_page,
         'metabolite_count_by_activity': metabolite_count_by_activity,
+        'current_sorts': sort_params,
+        'current_common_sorts': common_sort_params,
     }
     
     return render(request, 'metabolites/plant_detail.html', context)
@@ -277,22 +335,36 @@ def all_activities(request):
 @login_required
 def activity_detail(request, activity_id):
     activity = get_object_or_404(Activity, id=activity_id)
+    sort = request.GET.get('plants_sort', 'name_asc')  # Changé de 'sort' à 'plants_sort'
+    search = request.GET.get('search', '')  # Ajout de la recherche
 
     count_per_page = 20
     
-    # Pagination des métabolites
+    # Pagination des métabolites avec tri
     metabolites_page = request.GET.get('metabolites_page', 1)
-    metabolites_list = activity.metaboliteactivity_set.all()
+    metabolites_list = activity.metaboliteactivity_set.select_related('metabolite').all()
+    
+    # Application du tri pour les métabolites
+    if sort == 'name_asc':
+        metabolites_list = metabolites_list.order_by('metabolite__name')
+    elif sort == 'name_desc':
+        metabolites_list = metabolites_list.order_by('-metabolite__name')
+    elif sort == 'dosage_asc':
+        metabolites_list = metabolites_list.order_by('dosage')
+    elif sort == 'dosage_desc':
+        metabolites_list = metabolites_list.order_by('-dosage')
+    
     metabolites_paginator = Paginator(metabolites_list, count_per_page)
     metabolites = metabolites_paginator.get_page(metabolites_page)
     metabolite_page_count = metabolites_paginator.num_pages
-    print(f"Nombre de pages: {metabolite_page_count}")
 
-    # Pagination des plantes par concentration - on garde la pagination SQL
+    # Pagination des plantes par concentration
     concentration_page = int(request.GET.get('concentration_page', 1))
     plants_by_concentration = activity.get_plants_by_total_concentration(
         page=concentration_page,
-        per_page=count_per_page
+        per_page=count_per_page,
+        sort=sort,
+        search=search
     )
     
     # Paramètres pour la pagination
@@ -310,6 +382,8 @@ def activity_detail(request, activity_id):
         'concentration_start': (concentration_page - 1) * count_per_page,
         'query_params': query_params.urlencode(),
         'metabolite_page_count': metabolite_page_count,
+        'current_sort': sort,
+        'current_search': search,
     }
     
     return render(request, 'metabolites/activity_detail.html', context)

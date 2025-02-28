@@ -21,10 +21,33 @@ class Metabolite(models.Model):
         """Version optimisée et mise en cache"""
         return self.plants.values('plant_name').distinct().count()
     
-    def get_plants_with_parts(self):
-        """Version optimisée avec SQL brut"""
+    def get_plants_with_parts(self, sort_field=None, sort_direction=None):
+        """Version optimisée avec SQL brut et tri dynamique"""
+        # Définir l'ordre par défaut
+        order_by = "mp.plant_name, mp.plant_part"
+        
+        # Construire la clause ORDER BY en fonction des paramètres de tri
+        if sort_field and sort_direction:
+            direction = "ASC" if sort_direction == "asc" else "DESC"
+            if sort_field == "plant_name":
+                order_by = f"mp.plant_name {direction}, mp.plant_part"
+            elif sort_field == "plant_part":
+                order_by = f"mp.plant_part {direction}, mp.plant_name"
+            elif sort_field in ["low", "high", "deviation"]:
+                # Pour les champs numériques, gérer les valeurs NULL
+                order_by = f"""
+                    CASE 
+                        WHEN mp.{sort_field} IS NULL THEN 1 
+                        ELSE 0 
+                    END,
+                    COALESCE(mp.{sort_field}, 0) {direction},
+                    mp.plant_name
+                """
+            elif sort_field == "reference":
+                order_by = f"mp.reference {direction}, mp.plant_name"
+
         with connection.cursor() as cursor:
-            cursor.execute("""
+            cursor.execute(f"""
                 SELECT 
                     mp.plant_name,
                     mp.plant_part,
@@ -36,7 +59,7 @@ class Metabolite(models.Model):
                 FROM metabolites_metaboliteplant mp
                 JOIN metabolites_plant p ON p.name = mp.plant_name
                 WHERE mp.metabolite_id = %s
-                ORDER BY mp.plant_name, mp.plant_part
+                ORDER BY {order_by}
             """, [self.id])
             
             columns = [col[0] for col in cursor.description]
@@ -130,11 +153,39 @@ class Activity(models.Model):
     def __str__(self):
         return self.name
     
-    def get_plants_by_total_concentration(self, page=1, per_page=50):
+    def get_plants_by_total_concentration(self, page=1, per_page=50, sort='name_asc', search=''):
         """Retourne les plantes triées par concentration totale des métabolites ayant cette activité"""
         offset = (page - 1) * per_page
+        
+        # Définition de l'ordre SQL en fonction du paramètre sort
+        order_by = """
+            CASE WHEN total_concentration IS NULL THEN 1 ELSE 0 END,
+            CASE WHEN total_concentration IS NULL THEN 0 ELSE 1 END DESC,
+            total_concentration DESC
+        """
+        
+        if sort == 'name_asc':
+            order_by = "name ASC"
+        elif sort == 'name_desc':
+            order_by = "name DESC"
+        elif sort == 'concentration_asc':
+            order_by = "COALESCE(total_concentration, 0) ASC"
+        elif sort == 'concentration_desc':
+            order_by = "COALESCE(total_concentration, 0) DESC"
+        elif sort == 'metabolites_asc':
+            order_by = "metabolites_count ASC"
+        elif sort == 'metabolites_desc':
+            order_by = "metabolites_count DESC"
+        
+        # Ajout de la condition de recherche pour MySQL
+        search_condition = ""
+        params = [self.id]
+        if search:
+            search_condition = "AND LOWER(p.name) LIKE LOWER(%s)"
+            params.append(f"%{search}%")
+        
         with connection.cursor() as cursor:
-            cursor.execute("""
+            cursor.execute(f"""
                 WITH activity_metabolites AS (
                     SELECT DISTINCT ma.metabolite_id, m.name as metabolite_name
                     FROM metabolites_metaboliteactivity ma
@@ -151,6 +202,7 @@ class Activity(models.Model):
                     FROM metabolites_plant p
                     JOIN metabolites_metaboliteplant mp ON mp.plant_name = p.name
                     JOIN activity_metabolites am ON am.metabolite_id = mp.metabolite_id
+                    WHERE 1=1 {search_condition}
                 ),
                 plant_summary AS (
                     SELECT 
@@ -162,10 +214,7 @@ class Activity(models.Model):
                             CONCAT(metabolite_name, ":", plant_part, ":", COALESCE(high, "NULL"))
                             SEPARATOR "|"
                         ) as details,
-                        CASE 
-                            WHEN COUNT(CASE WHEN high IS NULL THEN 1 END) > 0 THEN NULL
-                            ELSE SUM(COALESCE(high, 0))
-                        END as total_concentration
+                        SUM(COALESCE(high, 0)) as total_concentration
                     FROM plant_details
                     GROUP BY id, name
                 )
@@ -178,15 +227,9 @@ class Activity(models.Model):
                     COUNT(*) OVER() as total_count,
                     CASE WHEN total_concentration IS NULL THEN 1 ELSE 0 END as has_unknown_concentration
                 FROM plant_summary
-                ORDER BY 
-                    has_unknown_concentration,
-                    CASE 
-                        WHEN total_concentration IS NULL THEN 0 
-                        ELSE 1 
-                    END DESC,
-                    total_concentration DESC
+                ORDER BY {order_by}
                 LIMIT %s OFFSET %s
-            """, [self.id, per_page, offset])
+            """, params + [per_page, offset])
             
             columns = [col[0] for col in cursor.description]
             results = [dict(zip(columns, row)) for row in cursor.fetchall()]
@@ -211,7 +254,7 @@ class Activity(models.Model):
                                         concentration_text = 'inconnu'
                                 metabolites[metabolite].append(f"{part}: {concentration_text}")
                         except Exception:
-                            continue  # Skip les détails mal formatés
+                            continue
                     
                     result['metabolites_details'] = [
                         {'name': name, 'parts': parts}
@@ -269,9 +312,34 @@ class Plant(models.Model):
             logger.debug("Cache hit - Utilisation des données en cache")
         return result
 
-    def get_common_plants(self, activity_filter=None, page=1, per_page=50):
+    def get_common_plants(self, activity_filter=None, page=1, per_page=50, sort_params=None):
         """Version optimisée avec matérialisation des CTE et index"""
         offset = (page - 1) * per_page
+        
+        # Construction de l'ordre SQL en fonction des paramètres de tri
+        order_by = []
+        if sort_params:
+            for field, direction in sort_params:
+                if field == 'name':
+                    order_by.append(f"p.name {direction}")
+                elif field == 'common_metabolites':
+                    order_by.append(f"common_metabolites_count {direction}")
+                elif field == 'common_percentage':
+                    order_by.append(f"(common_metabolites_count * 100.0 / NULLIF(t1.total_count, 0)) {direction}")
+                elif field == 'common_activity_metabolites' and activity_filter:
+                    order_by.append(f"common_activity_metabolites_count {direction}")
+                elif field == 'total_activity_metabolites' and activity_filter:
+                    order_by.append(f"total_activity_metabolites_count {direction}")
+        
+        # Ordre par défaut si aucun tri n'est spécifié
+        if not order_by:
+            if activity_filter:
+                order_by = ["common_activity_metabolites_count DESC", "common_metabolites_count DESC"]
+            else:
+                order_by = ["common_metabolites_count DESC"]
+        
+        order_by_clause = f"ORDER BY {', '.join(order_by)}"
+        
         with connection.cursor() as cursor:
             if activity_filter:
                 # Créer les tables temporaires
@@ -291,8 +359,8 @@ class Plant(models.Model):
                     WHERE a.name = %s
                 """, [activity_filter])
 
-                # Requête principale
-                cursor.execute("""
+                # Requête principale avec tri dynamique
+                cursor.execute(f"""
                     SELECT 
                         p.id,
                         p.name,
@@ -325,8 +393,7 @@ class Plant(models.Model):
                     WHERE p.name != %s
                     GROUP BY p.id, p.name, t1.total_count, t2.activity_count
                     HAVING COUNT(DISTINCT mp2.metabolite_id) > 0
-                    ORDER BY common_activity_metabolites_count DESC, 
-                             common_metabolites_count DESC
+                    {order_by_clause}
                     LIMIT %s OFFSET %s
                 """, [activity_filter, self.name, per_page, offset])
 
@@ -338,7 +405,7 @@ class Plant(models.Model):
                 cursor.execute("DROP TEMPORARY TABLE IF EXISTS temp_activity_metabolites")
 
             else:
-                # Version sans activité
+                # Version sans activité avec tri dynamique
                 cursor.execute("""
                     CREATE TEMPORARY TABLE IF NOT EXISTS temp_reference_metabolites AS
                     SELECT DISTINCT metabolite_id
@@ -346,7 +413,7 @@ class Plant(models.Model):
                     WHERE plant_name = %s
                 """, [self.name])
 
-                cursor.execute("""
+                cursor.execute(f"""
                     SELECT 
                         p.id,
                         p.name,
@@ -364,7 +431,7 @@ class Plant(models.Model):
                     WHERE p.name != %s
                     GROUP BY p.id, p.name, t1.total_count
                     HAVING COUNT(DISTINCT mp2.metabolite_id) > 0
-                    ORDER BY common_metabolites_count DESC
+                    {order_by_clause}
                     LIMIT %s OFFSET %s
                 """, [self.name, per_page, offset])
 

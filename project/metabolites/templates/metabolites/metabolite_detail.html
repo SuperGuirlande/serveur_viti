@@ -2,7 +2,7 @@
 
 
 {% block content %}
-<div class="container mx-auto px-4 py-8 max-w-4xl">
+<div class="container mx-auto px-4 py-8 max-w-7xl">
     <!-- En-tête du métabolite -->
     <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
         <h1 class="text-3xl font-bold text-center text-green-700 mb-4">
@@ -32,13 +32,19 @@
 
     <!-- Section Activités -->
     <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
-        <h2 class="text-2xl font-bold text-green-700 mb-6 flex items-center">
-           <span>
-            <i class="fa-solid fa-microscope mr-2"></i>
-           </span>
-            Activités
-        </h2>
-        <div class="grid gap-4">
+        <button 
+            class="w-full flex justify-between items-center text-2xl font-bold text-gray-800 mb-6 focus:outline-none" 
+            onclick="toggleActivities()"
+        >
+            <div class="flex items-center text-green-700">
+                <i class="fa-solid fa-microscope mr-2"></i>
+                Activités
+            </div>
+            <svg id="activities-chevron" class="w-6 h-6 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+        </button>
+        <div id="activities-content" class="grid gap-4 hidden">
             {% for activity in activities %}
             <a href="{% url 'activity_detail' activity.activity.id %}">
             <div class="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
@@ -53,7 +59,7 @@
                     </div>
                     <div class="flex items-center">
                         <span class="font-semibold text-gray-700">Référence:</span>
-                        <span class="ml-2 text-green-600 hover:text-green-800 line-clamp-1">{{ activity.reference }}</span>
+                        <span class="ml-2 text-green-600 hover:text-green-800 line-clamp-1 text-wrap max-w-sm">{{ activity.reference }}</span>
                     </div>
                 </div>
             </div>
@@ -102,15 +108,69 @@
             Plantes
         </h2>
         <div class="overflow-x-auto">
-            <table class="min-w-full table-auto">
+            <table id="plants-table" class="min-w-full table-auto">
                 <thead class="bg-gray-50">
                     <tr>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Plante</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Partie</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Min</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Max</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Écart-type</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Référence</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <div class="flex flex-col gap-1">
+                                <span>Plante</span>
+                                <select class="sort-select text-xs" data-field="plant_name" onchange="updateSort(this)">
+                                    <option value="">Trier par</option>
+                                    <option value="asc">A → Z</option>
+                                    <option value="desc">Z → A</option>
+                                </select>
+                            </div>
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <div class="flex flex-col gap-1">
+                                <span>Partie</span>
+                                <select class="sort-select text-xs" data-field="plant_part" onchange="updateSort(this)">
+                                    <option value="">Trier par</option>
+                                    <option value="asc">A → Z</option>
+                                    <option value="desc">Z → A</option>
+                                </select>
+                            </div>
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <div class="flex flex-col gap-1">
+                                <span>Min</span>
+                                <select class="sort-select text-xs" data-field="low" onchange="updateSort(this)">
+                                    <option value="">Trier par</option>
+                                    <option value="asc">Plus petit</option>
+                                    <option value="desc">Plus grand</option>
+                                </select>
+                            </div>
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <div class="flex flex-col gap-1">
+                                <span>Max</span>
+                                <select class="sort-select text-xs" data-field="high" onchange="updateSort(this)">
+                                    <option value="">Trier par</option>
+                                    <option value="asc">Plus petit</option>
+                                    <option value="desc">Plus grand</option>
+                                </select>
+                            </div>
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <div class="flex flex-col gap-1">
+                                <span>Écart-type</span>
+                                <select class="sort-select text-xs" data-field="deviation" onchange="updateSort(this)">
+                                    <option value="">Trier par</option>
+                                    <option value="asc">Plus petit</option>
+                                    <option value="desc">Plus grand</option>
+                                </select>
+                            </div>
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <div class="flex flex-col gap-1">
+                                <span>Référence</span>
+                                <select class="sort-select text-xs" data-field="reference" onchange="updateSort(this)">
+                                    <option value="">Trier par</option>
+                                    <option value="asc">A → Z</option>
+                                    <option value="desc">Z → A</option>
+                                </select>
+                            </div>
+                        </th>
                     </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
@@ -126,7 +186,7 @@
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ plant.low }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ plant.high }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ plant.deviation }}</td>
-                        <td class="px-6 py-4 text-wrap text-sm text-green-600 hover:text-green-800 line-clamp-1">
+                        <td class="px-6 py-4 text-wrap text-sm text-green-600 hover:text-green-800 line-clamp-1 max-w-[200px]">
                             <span class="truncate block" title="{{ plant.reference }}">{{ plant.reference }}</span>
                         </td>
                     </tr>
@@ -143,10 +203,10 @@
         <div class="mt-6 flex justify-center">
             <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
                 {% if plants.has_previous %}
-                    <a href="?plants_page=1" class="relative inline-flex items-center px-4 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                    <a href="?plants_page=1{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.direction %}&direction={{ request.GET.direction }}{% endif %}" class="relative inline-flex items-center px-4 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
                         Première
                     </a>
-                    <a href="?plants_page={{ plants.previous_page_number }}" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                    <a href="?plants_page={{ plants.previous_page_number }}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.direction %}&direction={{ request.GET.direction }}{% endif %}" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
                         Précédente
                     </a>
                 {% endif %}
@@ -154,10 +214,10 @@
                     Page {{ plants.number }} sur {{ plants.paginator.num_pages }}
                 </span>
                 {% if plants.has_next %}
-                    <a href="?plants_page={{ plants.next_page_number }}" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                    <a href="?plants_page={{ plants.next_page_number }}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.direction %}&direction={{ request.GET.direction }}{% endif %}" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
                         Suivante
                     </a>
-                    <a href="?plants_page={{ plants.paginator.num_pages }}" class="relative inline-flex items-center px-4 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                    <a href="?plants_page={{ plants.paginator.num_pages }}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.direction %}&direction={{ request.GET.direction }}{% endif %}" class="relative inline-flex items-center px-4 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
                         Dernière
                     </a>
                 {% endif %}
@@ -166,5 +226,76 @@
         {% endif %}
     </div>
 </div>
+
+<script>
+    function toggleActivities() {
+        const content = document.getElementById('activities-content');
+        const chevron = document.getElementById('activities-chevron');
+        content.classList.toggle('hidden');
+        chevron.classList.toggle('rotate-180');
+    }
+
+    function updateSort(select) {
+        const field = select.dataset.field;
+        const direction = select.value;
+        
+        // Récupérer les paramètres actuels de l'URL
+        const urlParams = new URLSearchParams(window.location.search);
+        
+        // Mettre à jour les paramètres de tri
+        if (!direction) {
+            urlParams.delete('sort');
+            urlParams.delete('direction');
+        } else {
+            urlParams.set('sort', field);
+            urlParams.set('direction', direction);
+        }
+        
+        // Réinitialiser la page
+        urlParams.delete('plants_page');
+        
+        // Ajouter l'ancre à l'URL
+        urlParams.set('scroll', 'plants-table');
+        
+        // Rediriger vers la nouvelle URL
+        window.location.href = `${window.location.pathname}?${urlParams.toString()}`;
+    }
+
+    // Initialiser les sélecteurs de tri avec les valeurs actuelles
+    document.addEventListener('DOMContentLoaded', function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const field = urlParams.get('sort');
+        const direction = urlParams.get('direction');
+        const scroll = urlParams.get('scroll');
+        
+        if (field && direction) {
+            const select = document.querySelector(`select[data-field="${field}"]`);
+            if (select) {
+                select.value = direction;
+            }
+        }
+        
+        // Faire défiler jusqu'au tableau si nécessaire
+        if (scroll === 'plants-table') {
+            const table = document.getElementById('plants-table');
+            if (table) {
+                // Ajouter un petit délai pour s'assurer que la page est complètement chargée
+                setTimeout(() => {
+                    table.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 100);
+            }
+        }
+
+        // Déplier la section des activités si on est sur une page d'activités
+        if (urlParams.has('activities_page')) {
+            const content = document.getElementById('activities-content');
+            const chevron = document.getElementById('activities-chevron');
+            if (content && chevron) {
+                content.classList.remove('hidden');
+                chevron.classList.add('rotate-180');
+            }
+        }
+    });
+</script>
 {% endblock %}
 

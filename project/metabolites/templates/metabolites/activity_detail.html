@@ -90,13 +90,36 @@
     </div>
 
     <!-- Après le tableau des métabolites -->
-    <div class="bg-white rounded-lg shadow-lg p-6 mt-8">
-        <h2 class="text-2xl font-bold text-green-600 mb-6 flex items-center">
-            <span>
-                <i class="fa-solid fa-leaf mr-2"></i>
-            </span>
-            Plantes par concentration totale
-        </h2>
+    <div class="bg-white rounded-lg shadow-lg p-6 mt-8 flex flex-col gap-5" id="tableau-des-concentrations">
+        <div class="flex gap-5 justify-between my-3">
+            <h2 class="text-2xl font-bold text-green-600 mb-6 flex items-center">
+                <span>
+                    <i class="fa-solid fa-leaf mr-2"></i>
+                </span>
+                Plantes par concentration totale
+            </h2>
+
+            <div class="flex flex-col gap-3">
+                <form action="#tableau-des-concentrations" method="get" class="flex gap-2 flex-col">
+                    <!-- Garder les paramètres existants -->
+                    {% if metabolites_page %}<input type="hidden" name="metabolites_page" value="{{ metabolites_page }}">{% endif %}
+                    
+                    <div class="flex gap-2">
+                        <input type="text" name="search" value="{{ current_search }}" placeholder="Rechercher une plante" class="border border-gray-300 rounded-md p-2">
+                        <select name="plants_sort" class="border border-gray-300 rounded-md p-2" onchange="this.form.submit()">
+                            <option value="concentration_desc" {% if current_sort == 'concentration_desc' %}selected{% endif %}>Concentration totale - Décroissant</option>
+                            <option value="concentration_asc" {% if current_sort == 'concentration_asc' %}selected{% endif %}>Concentration totale - Croissant</option>
+                            <option value="metabolites_desc" {% if current_sort == 'metabolites_desc' %}selected{% endif %}>Nombre de métabolites - Décroissant</option>
+                            <option value="metabolites_asc" {% if current_sort == 'metabolites_asc' %}selected{% endif %}>Nombre de métabolites - Croissant</option>
+                            <option value="name_desc" {% if current_sort == 'name_desc' %}selected{% endif %}>Nom - Décroissant</option>
+                            <option value="name_asc" {% if current_sort == 'name_asc' %}selected{% endif %}>Nom - Croissant</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700">Rechercher</button>
+                </form>
+            </div>
+
+        </div>
         <div class="overflow-x-auto">
             <table class="min-w-full table-auto">
                 <thead class="bg-gray-50">
