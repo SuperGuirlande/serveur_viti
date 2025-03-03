@@ -273,6 +273,7 @@ class Activity(models.Model):
 
 class Plant(models.Model):
     name = models.CharField(max_length=200, db_index=True)
+    french_name = models.CharField(max_length=200, null=True, blank=True)
 
     def __str__(self):
         return self.name

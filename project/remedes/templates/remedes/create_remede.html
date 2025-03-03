@@ -35,6 +35,37 @@ Créer un remède - Base de données interactive
         height: 100px;
     }
 </style>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.querySelector('form');
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(form);
+        
+        fetch(window.location.href, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': formData.get('csrfmiddlewaretoken'),
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.text())
+        .then(url => {
+            if (url && url.trim()) {
+                window.location.href = url;
+            } else {
+                window.location.reload();
+            }
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            window.location.reload();
+        });
+    });
+});
+</script>
 {% endblock %}
 
 {% block content %}
@@ -142,11 +173,17 @@ Créer un remède - Base de données interactive
 
             <button type="submit" class="bg-green-700 hover:bg-green-800 transition-all duration-300 
             shadow-md hover:shadow-green-700/50 hover:shadow-xl shadow-green-700/30 hover:-translate-y-1 text-white px-4 py-2 rounded-md">
-                <span><i class="fa-solid fa-leaf"></i>
-                </span>
-                <span>
+            {% if remede %}
+            <span><i class="fa-solid fa-floppy-disk"></i></span>
+            <span>
+                Sauvegarder les infos
+            </span>
+            {% else %}
+            <span><i class="fa-solid fa-leaf"></i></span>
+            <span>
                     Chercher des plantes
                 </span>
+                {% endif %}
             </button>
         </form>
     </div>

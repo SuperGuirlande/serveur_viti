@@ -1,8 +1,10 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.core.serializers.json import DjangoJSONEncoder
+from django.urls import reverse
 import json
 from .models import Remede, Plant
 from .forms import RemedeForm
+from django.http import HttpResponse, JsonResponse
 
 def all_remedes(request):
     remedes = Remede.objects.all()
@@ -15,13 +17,25 @@ def all_remedes(request):
 
 
 def remede_form(request, id=None):
+    remede = None
     if id:
-        remede = get_object_or_404(Remede, id=id)
+        remede = get_object_or_404(Remede.objects.prefetch_related('plants'), id=id)
         if request.method == 'POST':
             form = RemedeForm(request.POST, instance=remede)
             if form.is_valid():
+                # Sauvegarder les plantes actuelles
+                current_plants = list(remede.plants.all())
+                
+                # Sauvegarder le formulaire
                 remede = form.save()
-                return redirect('select_plants_for_remede', remede_id=remede.id)
+                
+                # Réassigner les plantes
+                remede.plants.set(current_plants)
+                
+                url = reverse('all_remedes')
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return HttpResponse(url)
+                return redirect(url)
         else:
             form = RemedeForm(instance=remede)
     else:
@@ -29,11 +43,15 @@ def remede_form(request, id=None):
             form = RemedeForm(request.POST)
             if form.is_valid():
                 remede = form.save()
-                return redirect('select_plants_for_remede', remede_id=remede.id)
+                url = reverse('select_plants_for_remede', kwargs={'remede_id': remede.id})
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return HttpResponse(url)
+                return redirect(url)
         else:
             form = RemedeForm()
 
     context = {
+        'remede': remede,
         'form': form
     }
 

@@ -8,8 +8,8 @@ class ActivityAdmin(admin.ModelAdmin):
     ordering = ('name',)
 
 class PlantAdmin(admin.ModelAdmin):
-    list_display = ('name',)
-    search_fields = ('name',)
+    list_display = ('name', 'french_name')
+    search_fields = ('name', 'french_name')
     ordering = ('name',)
 
 class MetaboliteActivityInline(admin.TabularInline):

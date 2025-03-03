@@ -22,6 +22,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'tailwind',
     'django_ckeditor_5',
+    'open_ai_api',
     'accounts',
     'main',
     'theme',
@@ -264,6 +265,10 @@ DEFAULT_FROM_EMAIL = 'contact@agencecodemaster.com'
 
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# OPENAI API #
+OPENAI_API_KEY = env('OPENAI_API_KEY')
+
 
 # Configuration des logs
 LOGGING = {
