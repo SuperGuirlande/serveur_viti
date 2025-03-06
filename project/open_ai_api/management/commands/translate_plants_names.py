@@ -106,6 +106,20 @@ Plante inconnue →"""},
                 )
                 translated_name = response.choices[0].message.content.strip()
 
+                # Validation de la réponse
+                if len(translated_name) > 220:
+                    safe_print(f"⚠️ {plant.name:<40} → Réponse trop longue, ignorée")
+                    logger.warning(f"Réponse trop longue pour {plant.name}: {translated_name}")
+                    self.error_count += 1
+                    return None
+
+                # Vérifie si la réponse contient le prompt système
+                if "Tu es un traducteur expert en botanique" in translated_name:
+                    safe_print(f"⚠️ {plant.name:<40} → Réponse invalide (contient le prompt), ignorée")
+                    logger.warning(f"Réponse invalide pour {plant.name}: {translated_name}")
+                    self.error_count += 1
+                    return None
+
                 # Ajout de logging détaillé
                 logger.debug(f"Réponse brute de l'API pour {plant.name}: '{translated_name}'")
 
