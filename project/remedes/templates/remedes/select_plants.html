@@ -7,25 +7,35 @@ Sélection des plantes - Base de données interactive
 {% block extra_head %}
 <style>
     .activity-section {
-        margin-bottom: 1.5rem;
+        margin-bottom: 1rem;
+    }
+
+    .activity-section h2 {
+        font-size: 1.25rem;
+        margin-bottom: 0.5rem;
     }
 
     .plant-table {
         width: 100%;
         border-collapse: collapse;
+        position: relative;
+        font-size: 0.875rem;
     }
 
     .plant-table th {
         background-color: #3b7e4610;
         color: #3b7e46;
         text-align: left;
-        padding: 1rem 1.5rem;
+        padding: 0.5rem 0.75rem;
         font-weight: 600;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
     }
 
     .plant-table tr {
         border-bottom: 1px solid #3b7e4620;
-        transition: all 0.3s ease-in-out;
+        transition: all 0.2s ease-in-out;
     }
 
     .plant-table tr.selected-elsewhere {
@@ -38,22 +48,22 @@ Sélection des plantes - Base de données interactive
     }
 
     .plant-table td {
-        padding: 1rem 1.5rem;
+        padding: 0.5rem 0.75rem;
     }
 
     .plant-checkbox {
-        width: 1.25rem;
-        height: 1.25rem;
+        width: 1rem;
+        height: 1rem;
         color: #3b7e46;
         border-color: #3b7e46;
         border-radius: 0.25rem;
     }
 
     .concentration-badge {
-        padding: 0.5rem 1rem;
+        padding: 0.25rem 0.5rem;
         border-radius: 0.25rem;
-        font-size: 0.875rem;
-        font-weight: 600;
+        font-size: 0.75rem;
+        font-weight: 500;
     }
 
     .concentration-high {
@@ -70,139 +80,309 @@ Sélection des plantes - Base de données interactive
         background-color: #3b7e4610;
         color: #3b7e46;
     }
+
+    .plant-row {
+        position: relative;
+    }
+
+    .plant-row td {
+        position: static;
+    }
+
+    .metabolites-tooltip {
+        visibility: hidden;
+        opacity: 0;
+        position: absolute;
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 0.5rem;
+        padding: 0.75rem;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        width: 600px;
+        z-index: 9999;
+        transition: opacity 0.2s ease-in-out;
+        display: flex;
+        gap: 1rem;
+        right: 0;
+        top: 0;
+        margin-left: 20px;
+    }
+
+    .metabolites-section {
+        flex: 1;
+        margin-bottom: 0;
+    }
+
+    .metabolites-section h4 {
+        color: #3b7e46;
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+        padding-bottom: 0.15rem;
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .metabolites-list {
+        max-height: 300px;
+        overflow-y: auto;
+        margin-top: 0.5rem;
+        padding-right: 0.5rem;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.15rem;
+    }
+
+    .metabolites-list::-webkit-scrollbar {
+        width: 4px;
+    }
+
+    .metabolites-list::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 2px;
+    }
+
+    .metabolites-list::-webkit-scrollbar-thumb {
+        background: #3b7e46;
+        border-radius: 2px;
+    }
+
+    .metabolite-item {
+        padding: 0.15rem 0.35rem;
+        font-size: 0.7rem;
+        color: #374151;
+        border-radius: 0.25rem;
+        transition: background-color 0.2s;
+        background-color: #f3f4f6;
+        line-height: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .metabolite-item:hover {
+        background-color: #3b7e4610;
+        color: #3b7e46;
+        white-space: normal;
+        position: relative;
+        z-index: 1;
+    }
+
+    .plant-row:hover .metabolites-tooltip {
+        visibility: visible;
+        opacity: 1;
+        transition: opacity 0.3s ease-in-out;
+    }
+
+    .overflow-x-auto {
+        position: relative;
+        overflow: visible !important;
+        width: 100%;
+    }
+
+    .tooltip-cell {
+        position: relative;
+        padding: 0 !important;
+        width: 0;
+    }
 </style>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const checkboxes = document.querySelectorAll('.plant-checkbox');
-    const plantRows = {};
-    const allPlantsData = JSON.parse('{{ all_plants_data_json|safe }}');
-    const activities = JSON.parse('{{ activities_json|safe }}');
-    const recapSection = document.getElementById('selected-plants-recap');
+    try {
+        const allPlantsData = {{ all_plants_data_json|safe }};
+        console.log('All Plants Data:', allPlantsData);
+        const activities = {{ activities_json|safe }};
+        const checkboxes = document.querySelectorAll('.plant-checkbox');
+        const plantRows = {};
+        const recapSection = document.getElementById('selected-plants-recap');
 
-    // Fonction pour formater la concentration
-    function formatConcentration(concentration) {
-        if (concentration === null || concentration === undefined) {
-            return 'Non spécifiée';
-        }
-        return parseFloat(concentration).toFixed(2);
-    }
-
-    function updateRecap() {
-        const selectedPlants = new Set();
-        
-        // Collecter les plantes sélectionnées
-        checkboxes.forEach(checkbox => {
-            if (checkbox.checked) {
-                selectedPlants.add(checkbox.value);
+        // Fonction pour formater la concentration
+        function formatConcentration(concentration) {
+            if (concentration === null || concentration === undefined) {
+                return 'Non spécifiée';
             }
-        });
+            return parseFloat(concentration).toFixed(2);
+        }
 
-        // Générer le HTML du récapitulatif
-        let recapHTML = '';
-        
-        if (selectedPlants.size === 0) {
-            recapHTML = '<p class="text-gray-500 italic">Aucune plante sélectionnée</p>';
-        } else {
-            // Ajouter l'en-tête du tableau
-            recapHTML = `
-                <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-green-200">
-                        <thead>
-                            <tr>
-                                <th class="px-6 py-3 bg-green-50 text-left text-xs font-medium text-green-700 uppercase tracking-wider">
-                                    Plante
-                                </th>
-                                ${activities.map(activity => `
-                                    <th class="px-6 py-3 bg-green-50 text-left text-xs font-medium text-green-700 uppercase tracking-wider">
-                                        ${activity}
-                                    </th>
-                                `).join('')}
-                            </tr>
-                        </thead>
-                        <tbody class="bg-white divide-y divide-green-200">
-            `;
-
-            // Ajouter une ligne pour chaque plante sélectionnée
-            selectedPlants.forEach(plantId => {
-                const plantData = allPlantsData[plantId];
-                recapHTML += `
-                    <tr class="hover:bg-green-50">
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-700">
-                            ${plantData.name}
-                        </td>
-                        ${activities.map(activity => {
-                            const activityData = plantData.activities[activity] || {};
-                            return `
-                                <td class="px-6 py-4 whitespace-nowrap">
-                                    <div class="text-sm text-gray-900">
-                                        <div class="font-medium">
-                                            Concentration: ${formatConcentration(activityData.concentration)}
-                                        </div>
-                                        <div class="text-gray-500">
-                                            ${activityData.metabolites_count || '0'} métabolite(s)
-                                        </div>
-                                    </div>
-                                </td>
-                            `;
-                        }).join('')}
-                    </tr>
-                `;
+        // Fonction pour mettre à jour le récapitulatif
+        function updateRecap() {
+            const selectedPlants = new Set();
+            
+            checkboxes.forEach(checkbox => {
+                if (checkbox.checked) {
+                    selectedPlants.add(checkbox.value);
+                }
             });
 
-            recapHTML += `
-                        </tbody>
-                    </table>
-                </div>
-            `;
-        }
-        
-        recapSection.innerHTML = recapHTML;
-    }
-
-    // Fonction pour mettre à jour l'état des autres instances de la même plante
-    function updatePlantInstances(plantId, isChecked) {
-        plantRows[plantId].forEach(row => {
-            const checkbox = row.querySelector('.plant-checkbox');
-            if (isChecked) {
-                if (!checkbox.checked) {
-                    row.classList.add('selected-elsewhere');
-                    checkbox.disabled = true;
-                }
+            let recapHTML = '';
+            
+            if (selectedPlants.size === 0) {
+                recapHTML = '<p class="text-gray-500 italic">Aucune plante sélectionnée</p>';
             } else {
-                row.classList.remove('selected-elsewhere');
-                checkbox.disabled = false;
+                // Pour chaque activité
+                activities.forEach(activity => {
+                    const activityPlants = [];
+                    let totalConcentration = 0;
+                    const commonMetabolites = new Map();
+                    const complementaryMetabolites = new Map();
+
+                    // Récupérer les plantes sélectionnées pour cette activité
+                    selectedPlants.forEach(plantId => {
+                        const plantData = allPlantsData[plantId];
+                        console.log('Plant Data for', plantId, ':', plantData);
+                        if (plantData && plantData.activities[activity]) {
+                            activityPlants.push(plantData);
+                            totalConcentration += parseFloat(plantData.activities[activity].concentration || 0);
+
+                            // Compter les métabolites communs
+                            const activityData = plantData.activities[activity];
+                            console.log('Activity Data for', activity, ':', activityData);
+                            if (activityData.common_metabolites_names && activityData.common_metabolites_names.length > 0) {
+                                activityData.common_metabolites_names.forEach(metabolite => {
+                                    commonMetabolites.set(metabolite, (commonMetabolites.get(metabolite) || 0) + 1);
+                                });
+                            }
+
+                            // Compter les métabolites complémentaires
+                            if (activityData.complementary_metabolites_names && activityData.complementary_metabolites_names.length > 0) {
+                                activityData.complementary_metabolites_names.forEach(metabolite => {
+                                    complementaryMetabolites.set(metabolite, (complementaryMetabolites.get(metabolite) || 0) + 1);
+                                });
+                            }
+                        }
+                    });
+
+                    if (activityPlants.length > 0) {
+                        recapHTML += `
+                            <div class="mb-8">
+                                <h3 class="text-xl font-bold text-green-700 mb-4 flex items-center gap-2">
+                                    <i class="fa-solid fa-flask"></i>
+                                    ${activity}
+                                </h3>
+                                
+                                <!-- Plantes sélectionnées -->
+                                <div class="mb-4">
+                                    <h4 class="text-sm font-semibold text-gray-700 mb-2">Plantes sélectionnées :</h4>
+                                    <div class="flex flex-wrap gap-2">
+                                        ${activityPlants.map(plant => `
+                                            <span class="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm">
+                                                ${plant.name}
+                                            </span>
+                                        `).join('')}
+                                    </div>
+                                </div>
+
+                                <!-- Concentration totale -->
+                                <div class="mb-4">
+                                    <h4 class="text-sm font-semibold text-gray-700 mb-2">Concentration totale :</h4>
+                                    <span class="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm">
+                                        ${totalConcentration.toFixed(2)}
+                                    </span>
+                                </div>
+
+                                <!-- Métabolites communs -->
+                                <div class="mb-4">
+                                    <h4 class="text-sm font-semibold text-gray-700 mb-2">Métabolites communs avec la plante cible :</h4>
+                                    <div class="flex flex-wrap gap-2">
+                                        ${Array.from(commonMetabolites.entries()).map(([metabolite, count]) => `
+                                            <span class="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm">
+                                                ${metabolite} (${count})
+                                            </span>
+                                        `).join('')}
+                                    </div>
+                                </div>
+
+                                <!-- Métabolites complémentaires -->
+                                <div class="mb-4">
+                                    <h4 class="text-sm font-semibold text-gray-700 mb-2">Métabolites complémentaires :</h4>
+                                    <div class="flex flex-wrap gap-2">
+                                        ${Array.from(complementaryMetabolites.entries()).map(([metabolite, count]) => `
+                                            <span class="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm">
+                                                ${metabolite} (${count})
+                                            </span>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }
+                });
+            }
+            
+            recapSection.innerHTML = recapHTML;
+        }
+
+        // Initialiser le mapping des lignes
+        checkboxes.forEach(checkbox => {
+            const plantId = checkbox.value;
+            if (!plantRows[plantId]) {
+                plantRows[plantId] = [];
+            }
+            plantRows[plantId].push(checkbox.closest('tr'));
+        });
+
+        // Gérer les plantes déjà sélectionnées au chargement
+        checkboxes.forEach(checkbox => {
+            if (checkbox.checked) {
+                const plantId = checkbox.value;
+                plantRows[plantId].forEach(row => {
+                    row.classList.add('selected-elsewhere');
+                    const otherCheckbox = row.querySelector('.plant-checkbox');
+                    if (otherCheckbox !== checkbox) {
+                        otherCheckbox.disabled = true;
+                    }
+                });
             }
         });
-        updateRecap();
-    }
 
-    // Initialiser le mapping des lignes
-    checkboxes.forEach(checkbox => {
-        const plantId = checkbox.value;
-        if (!plantRows[plantId]) {
-            plantRows[plantId] = [];
-        }
-        plantRows[plantId].push(checkbox.closest('tr'));
-    });
-
-    // Gérer les plantes déjà sélectionnées au chargement
-    checkboxes.forEach(checkbox => {
-        if (checkbox.checked) {
-            updatePlantInstances(checkbox.value, true);
-        }
-    });
-
-    // Ajouter les écouteurs d'événements pour les changements
-    checkboxes.forEach(checkbox => {
-        checkbox.addEventListener('change', function() {
-            const plantId = this.value;
-            updatePlantInstances(plantId, this.checked);
+        // Ajouter les écouteurs d'événements pour les changements
+        checkboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                const plantId = this.value;
+                const isChecked = this.checked;
+                plantRows[plantId].forEach(row => {
+                    if (isChecked) {
+                        row.classList.add('selected-elsewhere');
+                        const otherCheckbox = row.querySelector('.plant-checkbox');
+                        if (otherCheckbox !== this) {
+                            otherCheckbox.disabled = true;
+                        }
+                    } else {
+                        row.classList.remove('selected-elsewhere');
+                        const otherCheckbox = row.querySelector('.plant-checkbox');
+                        if (otherCheckbox !== this) {
+                            otherCheckbox.disabled = false;
+                        }
+                    }
+                });
+                updateRecap();
+            });
         });
-    });
 
-    // Initialiser le récapitulatif
-    updateRecap();
+        // Initialiser le récapitulatif
+        updateRecap();
+
+        // Gestion des tooltips
+        document.querySelectorAll('.plant-row').forEach(row => {
+            const tooltip = row.querySelector('.metabolites-tooltip');
+            
+            row.addEventListener('mouseenter', (e) => {
+                if (tooltip) {
+                    const rect = row.getBoundingClientRect();
+                    
+                    // Ajuster la position verticale si la tooltip dépasse le bas de l'écran
+                    const tooltipHeight = tooltip.offsetHeight;
+                    const windowHeight = window.innerHeight;
+                    if (rect.top + tooltipHeight > windowHeight) {
+                        tooltip.style.top = `${windowHeight - tooltipHeight - 20}px`;
+                    }
+                }
+            });
+        });
+    } catch (error) {
+        console.error('Erreur lors de l\'initialisation:', error);
+    }
 });
 </script>
 {% endblock %}
@@ -294,6 +474,95 @@ document.addEventListener('DOMContentLoaded', function() {
 <!-- Form Section -->
 <section class="w-full px-4 py-12">
     <div class="max-w-7xl mx-auto">
+        <!-- Options de tri -->
+        <div class="bg-white shadow-md rounded-lg p-6 mb-8">
+            <h2 class="text-2xl font-bold text-green-700 flex items-center gap-2 mb-6">
+                <i class="fa-solid fa-sort"></i>
+                Options de tri
+            </h2>
+            <form id="sortForm" method="GET" class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <!-- Tri 1 -->
+                    <div class="flex flex-col space-y-2">
+                        <label class="text-sm font-medium text-gray-700">Premier tri</label>
+                        <select name="sort0" class="form-select rounded-md border-gray-300">
+                            <option value="name" {% if sort_params.0.0 == 'name' %}selected{% endif %}>Nom de la plante</option>
+                            <option value="common_metabolites" {% if sort_params.0.0 == 'common_metabolites' %}selected{% endif %}>Nombre de métabolites en commun</option>
+                            <option value="common_percentage" {% if sort_params.0.0 == 'common_percentage' %}selected{% endif %}>Pourcentage en commun</option>
+                            <option value="common_activity_metabolites" {% if sort_params.0.0 == 'common_activity_metabolites' %}selected{% endif %}>Métabolites communs avec l'activité</option>
+                            <option value="total_activity_metabolites" {% if sort_params.0.0 == 'total_activity_metabolites' %}selected{% endif %}>Total métabolites avec l'activité</option>
+                            <option value="total_concentration" {% if sort_params.0.0 == 'total_concentration' %}selected{% endif %}>Concentration totale</option>
+                        </select>
+                        <select name="direction0" class="form-select rounded-md border-gray-300">
+                            <option value="asc" {% if sort_params.0.1 == 'asc' %}selected{% endif %}>Croissant</option>
+                            <option value="desc" {% if sort_params.0.1 == 'desc' %}selected{% endif %}>Décroissant</option>
+                        </select>
+                    </div>
+
+                    <!-- Tri 2 -->
+                    <div class="flex flex-col space-y-2">
+                        <label class="text-sm font-medium text-gray-700">Deuxième tri</label>
+                        <select name="sort1" class="form-select rounded-md border-gray-300">
+                            <option value="">Aucun</option>
+                            <option value="name" {% if sort_params.1.0 == 'name' %}selected{% endif %}>Nom de la plante</option>
+                            <option value="common_metabolites" {% if sort_params.1.0 == 'common_metabolites' %}selected{% endif %}>Nombre de métabolites en commun</option>
+                            <option value="common_percentage" {% if sort_params.1.0 == 'common_percentage' %}selected{% endif %}>Pourcentage en commun</option>
+                            <option value="common_activity_metabolites" {% if sort_params.1.0 == 'common_activity_metabolites' %}selected{% endif %}>Métabolites communs avec l'activité</option>
+                            <option value="total_activity_metabolites" {% if sort_params.1.0 == 'total_activity_metabolites' %}selected{% endif %}>Total métabolites avec l'activité</option>
+                            <option value="total_concentration" {% if sort_params.1.0 == 'total_concentration' %}selected{% endif %}>Concentration totale</option>
+                        </select>
+                        <select name="direction1" class="form-select rounded-md border-gray-300">
+                            <option value="asc" {% if sort_params.1.1 == 'asc' %}selected{% endif %}>Croissant</option>
+                            <option value="desc" {% if sort_params.1.1 == 'desc' %}selected{% endif %}>Décroissant</option>
+                        </select>
+                    </div>
+
+                    <!-- Tri 3 -->
+                    <div class="flex flex-col space-y-2">
+                        <label class="text-sm font-medium text-gray-700">Troisième tri</label>
+                        <select name="sort2" class="form-select rounded-md border-gray-300">
+                            <option value="">Aucun</option>
+                            <option value="name" {% if sort_params.2.0 == 'name' %}selected{% endif %}>Nom de la plante</option>
+                            <option value="common_metabolites" {% if sort_params.2.0 == 'common_metabolites' %}selected{% endif %}>Nombre de métabolites en commun</option>
+                            <option value="common_percentage" {% if sort_params.2.0 == 'common_percentage' %}selected{% endif %}>Pourcentage en commun</option>
+                            <option value="common_activity_metabolites" {% if sort_params.2.0 == 'common_activity_metabolites' %}selected{% endif %}>Métabolites communs avec l'activité</option>
+                            <option value="total_activity_metabolites" {% if sort_params.2.0 == 'total_activity_metabolites' %}selected{% endif %}>Total métabolites avec l'activité</option>
+                            <option value="total_concentration" {% if sort_params.2.0 == 'total_concentration' %}selected{% endif %}>Concentration totale</option>
+                        </select>
+                        <select name="direction2" class="form-select rounded-md border-gray-300">
+                            <option value="asc" {% if sort_params.2.1 == 'asc' %}selected{% endif %}>Croissant</option>
+                            <option value="desc" {% if sort_params.2.1 == 'desc' %}selected{% endif %}>Décroissant</option>
+                        </select>
+                    </div>
+
+                    <!-- Tri 4 -->
+                    <div class="flex flex-col space-y-2">
+                        <label class="text-sm font-medium text-gray-700">Quatrième tri</label>
+                        <select name="sort3" class="form-select rounded-md border-gray-300">
+                            <option value="">Aucun</option>
+                            <option value="name" {% if sort_params.3.0 == 'name' %}selected{% endif %}>Nom de la plante</option>
+                            <option value="common_metabolites" {% if sort_params.3.0 == 'common_metabolites' %}selected{% endif %}>Nombre de métabolites en commun</option>
+                            <option value="common_percentage" {% if sort_params.3.0 == 'common_percentage' %}selected{% endif %}>Pourcentage en commun</option>
+                            <option value="common_activity_metabolites" {% if sort_params.3.0 == 'common_activity_metabolites' %}selected{% endif %}>Métabolites communs avec l'activité</option>
+                            <option value="total_activity_metabolites" {% if sort_params.3.0 == 'total_activity_metabolites' %}selected{% endif %}>Total métabolites avec l'activité</option>
+                            <option value="total_concentration" {% if sort_params.3.0 == 'total_concentration' %}selected{% endif %}>Concentration totale</option>
+                        </select>
+                        <select name="direction3" class="form-select rounded-md border-gray-300">
+                            <option value="asc" {% if sort_params.3.1 == 'asc' %}selected{% endif %}>Croissant</option>
+                            <option value="desc" {% if sort_params.3.1 == 'desc' %}selected{% endif %}>Décroissant</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="flex justify-end">
+                    <button type="submit" class="bg-green-700 hover:bg-green-800 text-white px-6 py-3 rounded-lg shadow-md hover:shadow-lg transition-all duration-300 flex items-center gap-2">
+                        <i class="fa-solid fa-sort"></i>
+                        Appliquer le tri
+                    </button>
+                </div>
+            </form>
+        </div>
+
         <form method="POST" class="space-y-12">
             {% csrf_token %}
             
@@ -312,13 +581,16 @@ document.addEventListener('DOMContentLoaded', function() {
                             <tr>
                                 <th class="w-16">Sélection</th>
                                 <th>Nom de la plante</th>
+                                <th>Nb métabolites (activité)</th>
                                 <th>Concentration totale</th>
-                                <th>Nombre de métabolites</th>
+                                <th>Nb métabolites communs</th>
+                                <th>% en commun</th>
+                                <th>Nb métabolites communs (activité)</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for plant in plants %}
-                            <tr>
+                            <tr class="plant-row">
                                 <td class="text-center">
                                     <input type="checkbox" 
                                            name="selected_plants" 
@@ -333,6 +605,11 @@ document.addEventListener('DOMContentLoaded', function() {
                                     </label>
                                 </td>
                                 <td>
+                                    <span class="concentration-badge concentration-medium">
+                                        {{ plant.activity_metabolites_count|default:"0" }} métabolite(s)
+                                    </span>
+                                </td>
+                                <td>
                                     {% if plant.total_concentration %}
                                         <span class="concentration-badge concentration-high">
                                             {{ plant.total_concentration|floatformat:2 }}
@@ -344,15 +621,53 @@ document.addEventListener('DOMContentLoaded', function() {
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {% if plant.metabolites_count %}
-                                        <span class="concentration-badge concentration-medium">
-                                            {{ plant.metabolites_count }} métabolite(s)
-                                        </span>
-                                    {% else %}
-                                        <span class="concentration-badge concentration-low">
-                                            0
-                                        </span>
-                                    {% endif %}
+                                    <span class="concentration-badge concentration-medium">
+                                        {{ plant.common_metabolites_count|default:"0" }} métabolite(s)
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="concentration-badge concentration-medium">
+                                        {{ plant.common_percentage|floatformat:1 }}%
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="concentration-badge concentration-medium">
+                                        {{ plant.common_activity_metabolites_count|default:"0" }} métabolite(s)
+                                    </span>
+                                </td>
+                                <td class="tooltip-cell">
+                                    <div class="metabolites-tooltip">
+                                        <div class="metabolites-section">
+                                            <h4>
+                                                <i class="fa-solid fa-link"></i>
+                                                Métabolites en commun avec l'activité et la plante recherchée
+                                            </h4>
+                                            <div class="metabolites-list">
+                                                {% if plant.common_metabolites_names %}
+                                                    {% for metabolite in plant.common_metabolites_names %}
+                                                        <div class="metabolite-item">{{ metabolite }}</div>
+                                                    {% endfor %}
+                                                {% else %}
+                                                    <div class="metabolite-item text-gray-500 italic">Aucun métabolite en commun</div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        <div class="metabolites-section">
+                                            <h4>
+                                                <i class="fa-solid fa-plus"></i>
+                                                Métabolites complémentaires avec l'activité
+                                            </h4>
+                                            <div class="metabolites-list">
+                                                {% if plant.complementary_metabolites_names %}
+                                                    {% for metabolite in plant.complementary_metabolites_names %}
+                                                        <div class="metabolite-item">{{ metabolite }}</div>
+                                                    {% endfor %}
+                                                {% else %}
+                                                    <div class="metabolite-item text-gray-500 italic">Aucun métabolite complémentaire</div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
                                 </td>
                             </tr>
                             {% endfor %}

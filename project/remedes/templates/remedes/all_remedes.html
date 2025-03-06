@@ -49,17 +49,17 @@ Tous les remèdes - Base de données interactive
         color: #fff;
     }
     .primary-button:hover {
-        background-color: #3b7e46;
+        background-color: #63b871;
         color: #fff;
     }
 
     .secondary-button {
-        background-color: #f0f0f0;
-        color: #333;
+        background-color: #5061c4;
+        color: #f0f0f0;
     }
     .secondary-button:hover {
-        background-color: #f0f0f0;
-        color: #333;
+        background-color: #6779db;
+        color: #f0f0f0;
     }
 </style>
 {% endblock %}
@@ -109,16 +109,10 @@ Tous les remèdes - Base de données interactive
         {% for remede in remedes %}
         <div class="remede-card">
             <!-- En-tête -->
-            <div class="flex justify-between items-start mb-4">
-                <div class="flex gap-5 items-center">
-                    <h3 class="text-xl font-bold text-green-700">{{ remede.name }}</h3>
-                    <a href="{% url 'remede_detail' remede.id %}" class="text-green-600 hover:text-green-800">
-                        <i class="fa-solid fa-arrow-up-right-from-square"></i>
-                    </a>
-                </div>
-                <div class="flex gap-5 items-center">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 w-full gap-3">
+                <h3 class="text-xl font-bold text-green-700 whitespace-nowrap">{{ remede.name }}</h3>
+                <div class="flex flex-col gap-2 text-nowrap">
                     <p class="text-gray-500 text-sm">Créé par : {{ remede.created_by.username }} le {{ remede.created_at|date:'d F Y' }}</p>
-                    <p>|</p>
                     <p class="text-gray-500 text-sm">Dernière modification : {{ remede.updated_at|date:'d F Y' }}</p>
                 </div>
             </div>

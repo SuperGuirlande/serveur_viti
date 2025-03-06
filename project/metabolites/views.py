@@ -335,8 +335,8 @@ def all_activities(request):
 @login_required
 def activity_detail(request, activity_id):
     activity = get_object_or_404(Activity, id=activity_id)
-    sort = request.GET.get('plants_sort', 'name_asc')  # Changé de 'sort' à 'plants_sort'
-    search = request.GET.get('search', '')  # Ajout de la recherche
+    sort = request.GET.get('plants_sort', 'name_asc')  
+    search = request.GET.get('search', '')  
 
     count_per_page = 20
     
@@ -358,12 +358,27 @@ def activity_detail(request, activity_id):
     metabolites = metabolites_paginator.get_page(metabolites_page)
     metabolite_page_count = metabolites_paginator.num_pages
 
-    # Pagination des plantes par concentration
+    # Convertir le tri pour le format attendu par get_plants_by_total_concentration
+    sort_params = []
+    if sort == 'name_asc':
+        sort_params = [('name', 'asc')]
+    elif sort == 'name_desc':
+        sort_params = [('name', 'desc')]
+    elif sort == 'concentration_asc':
+        sort_params = [('total_concentration', 'asc')]
+    elif sort == 'concentration_desc':
+        sort_params = [('total_concentration', 'desc')]
+    elif sort == 'metabolites_asc':
+        sort_params = [('metabolites_count', 'asc')]
+    elif sort == 'metabolites_desc':
+        sort_params = [('metabolites_count', 'desc')]
+
+    # Pagination des plantes par concentration avec le nouveau format de tri
     concentration_page = int(request.GET.get('concentration_page', 1))
     plants_by_concentration = activity.get_plants_by_total_concentration(
         page=concentration_page,
         per_page=count_per_page,
-        sort=sort,
+        sort_params=sort_params,
         search=search
     )
     

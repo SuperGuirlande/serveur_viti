@@ -153,92 +153,113 @@ class Activity(models.Model):
     def __str__(self):
         return self.name
     
-    def get_plants_by_total_concentration(self, page=1, per_page=50, sort='name_asc', search=''):
-        """Retourne les plantes triées par concentration totale des métabolites ayant cette activité"""
-        offset = (page - 1) * per_page
-        
-        # Définition de l'ordre SQL en fonction du paramètre sort
-        order_by = """
-            CASE WHEN total_concentration IS NULL THEN 1 ELSE 0 END,
-            CASE WHEN total_concentration IS NULL THEN 0 ELSE 1 END DESC,
-            total_concentration DESC
-        """
-        
-        if sort == 'name_asc':
-            order_by = "name ASC"
-        elif sort == 'name_desc':
-            order_by = "name DESC"
-        elif sort == 'concentration_asc':
-            order_by = "COALESCE(total_concentration, 0) ASC"
-        elif sort == 'concentration_desc':
-            order_by = "COALESCE(total_concentration, 0) DESC"
-        elif sort == 'metabolites_asc':
-            order_by = "metabolites_count ASC"
-        elif sort == 'metabolites_desc':
-            order_by = "metabolites_count DESC"
-        
-        # Ajout de la condition de recherche pour MySQL
-        search_condition = ""
-        params = [self.id]
-        if search:
-            search_condition = "AND LOWER(p.name) LIKE LOWER(%s)"
-            params.append(f"%{search}%")
-        
+    def get_plants_by_total_concentration(self, page=1, per_page=50, sort_params=None, search=''):
         with connection.cursor() as cursor:
-            cursor.execute(f"""
-                WITH activity_metabolites AS (
-                    SELECT DISTINCT ma.metabolite_id, m.name as metabolite_name
-                    FROM metabolites_metaboliteactivity ma
-                    JOIN metabolites_metabolite m ON m.id = ma.metabolite_id
-                    WHERE ma.activity_id = %s
-                ),
-                plant_details AS (
+            # Construction de la clause WHERE pour la recherche
+            where_clause = "WHERE ma.activity_id = %s"
+            params = [self.id]
+            
+            if search:
+                where_clause += " AND p.name LIKE %s"
+                params.append(f"%{search}%")
+
+            # Construction de la clause ORDER BY
+            order_by = ""
+            if sort_params:
+                order_clauses = []
+                for field, direction in sort_params:
+                    if field == 'name':
+                        order_clauses.append(f"name {direction}")
+                    elif field == 'total_concentration':
+                        order_clauses.append(f"total_concentration {direction}")
+                    elif field == 'metabolites_count':
+                        order_clauses.append(f"metabolites_count {direction}")
+                if order_clauses:
+                    order_by = "ORDER BY " + ", ".join(order_clauses)
+            else:
+                order_by = "ORDER BY name ASC"
+
+            # Requête pour obtenir le compte total
+            count_query = f"""
+                SELECT COUNT(DISTINCT p.id)
+                FROM 
+                    metabolites_plant p
+                    JOIN metabolites_metaboliteplant mp ON mp.plant_name = p.name
+                    JOIN metabolites_metabolite m ON m.id = mp.metabolite_id
+                    JOIN metabolites_metaboliteactivity ma ON ma.metabolite_id = m.id
+                {where_clause}
+            """
+            cursor.execute(count_query, params[:2] if search else params[:1])
+            total_count = cursor.fetchone()[0]
+
+            # Requête principale
+            query = f"""
+                WITH plant_concentrations AS (
                     SELECT 
                         p.id,
                         p.name,
-                        am.metabolite_name,
-                        mp.plant_part,
-                        mp.high
-                    FROM metabolites_plant p
-                    JOIN metabolites_metaboliteplant mp ON mp.plant_name = p.name
-                    JOIN activity_metabolites am ON am.metabolite_id = mp.metabolite_id
-                    WHERE 1=1 {search_condition}
-                ),
-                plant_summary AS (
-                    SELECT 
-                        id,
-                        name,
-                        COUNT(DISTINCT metabolite_name) as metabolites_count,
+                        COUNT(DISTINCT mp.metabolite_id) as metabolites_count,
+                        COALESCE(SUM(
+                            CASE 
+                                WHEN mp.high IS NOT NULL THEN mp.high
+                                WHEN mp.low IS NOT NULL THEN mp.low
+                                ELSE NULL 
+                            END
+                        ), 0) as total_concentration,
                         GROUP_CONCAT(
-                            DISTINCT
-                            CONCAT(metabolite_name, ":", plant_part, ":", COALESCE(high, "NULL"))
-                            SEPARATOR "|"
-                        ) as details,
-                        SUM(COALESCE(high, 0)) as total_concentration
-                    FROM plant_details
-                    GROUP BY id, name
+                            CONCAT_WS(':', 
+                                m.name,
+                                COALESCE(mp.plant_part, 'non spécifié'),
+                                CAST(COALESCE(
+                                    CASE 
+                                        WHEN mp.high IS NOT NULL THEN mp.high
+                                        WHEN mp.low IS NOT NULL THEN mp.low
+                                        ELSE NULL 
+                                    END, 
+                                    'NULL'
+                                ) AS CHAR)
+                            ) SEPARATOR '|'
+                        ) as metabolites_details
+                    FROM 
+                        metabolites_plant p
+                        JOIN metabolites_metaboliteplant mp ON mp.plant_name = p.name
+                        JOIN metabolites_metabolite m ON m.id = mp.metabolite_id
+                        JOIN metabolites_metaboliteactivity ma ON ma.metabolite_id = m.id
+                    {where_clause}
+                    GROUP BY p.id, p.name
                 )
                 SELECT 
                     id,
                     name,
-                    details,
                     metabolites_count,
                     total_concentration,
-                    COUNT(*) OVER() as total_count,
-                    CASE WHEN total_concentration IS NULL THEN 1 ELSE 0 END as has_unknown_concentration
-                FROM plant_summary
-                ORDER BY {order_by}
+                    metabolites_details
+                FROM plant_concentrations
+                {order_by}
                 LIMIT %s OFFSET %s
-            """, params + [per_page, offset])
+            """
             
-            columns = [col[0] for col in cursor.description]
-            results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+            # Ajout des paramètres de pagination
+            params_main = params.copy()
+            params_main.extend([per_page, (page - 1) * per_page])
             
-            # Formater les détails pour l'affichage
-            for result in results:
-                if result['details']:
+            cursor.execute(query, params_main)
+            results = []
+            
+            # Traitement des résultats
+            for row in cursor.fetchall():
+                result = {
+                    'id': row[0],
+                    'name': row[1],
+                    'metabolites_count': row[2],
+                    'total_concentration': float(row[3]) if row[3] is not None else 0.0,
+                    'has_unknown_concentration': row[3] is None or row[3] == 0
+                }
+                
+                # Traitement des détails des métabolites
+                if row[4]:  # metabolites_details
                     metabolites = {}
-                    for detail in result['details'].split('|'):
+                    for detail in row[4].split('|'):
                         try:
                             parts = detail.split(':')
                             if len(parts) == 3:
@@ -260,8 +281,8 @@ class Activity(models.Model):
                         {'name': name, 'parts': parts}
                         for name, parts in metabolites.items()
                     ]
-            
-            total_count = results[0]['total_count'] if results else 0
+                
+                results.append(result)
             
             return {
                 'results': results,

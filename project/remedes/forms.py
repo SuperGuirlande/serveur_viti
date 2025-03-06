@@ -9,7 +9,7 @@ class RemedeForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['target_plant'].queryset = Plant.objects.all()
+        self.fields['target_plant'].queryset = Plant.objects.all().order_by('name')
         self.fields['name'].widget.attrs['class'] = 'form-input'
         self.fields['description'].widget.attrs['class'] = 'form-input'
         self.fields['notes'].widget.attrs['class'] = 'form-input'
