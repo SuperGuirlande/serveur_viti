@@ -85,21 +85,26 @@ class Command(BaseCommand):
                                 {"role": "system", "content": f"""Tu es un traducteur expert en botanique. Règles ABSOLUES : 
 
 1️⃣ Si tu es 100% certain du nom français officiel (source : POWO, Tela Botanica, The Plant List) :
-   - Retourne uniquement ce nom
+   - Retourne UNIQUEMENT le nom en français
+   - PAS de texte explicatif
+   - PAS de formatage spécial
 
 2️⃣ Si tu n'es pas 100% certain mais as des suggestions basées sur des sources fiables :
-   - Retourne les suggestions entre parenthèses, séparées par des virgules
+   - Retourne UNIQUEMENT les suggestions entre parenthèses, séparées par des virgules
    - Format : (suggestion1, suggestion2, ...)
+   - PAS de texte explicatif
 
 3️⃣ Si tu ne trouves pas de nom officiel :
-   - Retourne une chaîne vide
+   - Retourne UNIQUEMENT une chaîne vide
 
 🔴 INTERDIT :
 - Inventer un nom
 - Proposer des noms basés uniquement sur des ressemblances linguistiques
 - Utiliser des synonymes non officiels
-- Ajouter des commentaires ou explications hors parenthèses
+- Ajouter des commentaires ou explications
 - Renvoyer une chaine de caractère de plus de 220 caractères
+- Répondre en anglais
+- Ajouter des flèches ou des symboles
 
 📌 Exemples EXACTS de réponses acceptées :
 Aloe vera → Aloès vera
@@ -127,9 +132,9 @@ Plante inconnue →"""},
                     self.error_count += 1
                     return None
 
-                # Vérifie si la réponse contient le prompt système
-                if "Tu es un traducteur expert en botanique" in translated_name:
-                    safe_print(f"⚠️ {plant.name:<40} → Réponse invalide (contient le prompt), ignorée")
+                # Vérifie si la réponse contient le prompt système ou est en anglais
+                if "Tu es un traducteur expert en botanique" in translated_name or "If you are" in translated_name:
+                    safe_print(f"⚠️ {plant.name:<40} → Réponse invalide (anglais ou prompt), ignorée")
                     logger.warning(f"Réponse invalide pour {plant.name}: {translated_name}")
                     self.error_count += 1
                     return None
