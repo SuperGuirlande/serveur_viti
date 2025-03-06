@@ -67,17 +67,22 @@ class Command(BaseCommand):
         
         for attempt in range(max_retries):
             try:
+                logger.debug(f"Début de la traduction de {plant.name} (tentative {attempt + 1}/{max_retries})")
+                
                 # Estimation des tokens nécessaires (prompt + réponse potentielle)
                 estimated_tokens = len(plant.name) * 2 + 500
                 
                 # Attendre si nécessaire pour respecter le quota de tokens
                 await self.token_bucket.consume(estimated_tokens)
                 
-                response = await client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    temperature=0,
-                    messages=[
-                        {"role": "system", "content": f"""Tu es un traducteur expert en botanique. Règles ABSOLUES : 
+                # Ajout d'un timeout de 30 secondes pour la requête
+                try:
+                    response = await asyncio.wait_for(
+                        client.chat.completions.create(
+                            model="gpt-4o-mini",
+                            temperature=0,
+                            messages=[
+                                {"role": "system", "content": f"""Tu es un traducteur expert en botanique. Règles ABSOLUES : 
 
 1️⃣ Si tu es 100% certain du nom français officiel (source : POWO, Tela Botanica, The Plant List) :
    - Retourne uniquement ce nom
@@ -101,10 +106,19 @@ Aloe vera → Aloès vera
 Malus domestica → Pommier domestique
 Acacia confusa → (Acacia confus, Petit acacia philippin)
 Plante inconnue →"""},
-                        {"role": "user", "content": f"Traduis ce nom de plante en français : {plant.name}"}
-                    ]
-                )
+                                {"role": "user", "content": f"Traduis ce nom de plante en français : {plant.name}"}
+                            ]
+                        ),
+                        timeout=30.0
+                    )
+                except asyncio.TimeoutError:
+                    logger.error(f"Timeout lors de la traduction de {plant.name}")
+                    safe_print(f"⚠️ {plant.name:<40} → Timeout")
+                    self.error_count += 1
+                    return None
+
                 translated_name = response.choices[0].message.content.strip()
+                logger.debug(f"Réponse reçue pour {plant.name}: {translated_name}")
 
                 # Validation de la réponse
                 if len(translated_name) > 220:
@@ -119,9 +133,6 @@ Plante inconnue →"""},
                     logger.warning(f"Réponse invalide pour {plant.name}: {translated_name}")
                     self.error_count += 1
                     return None
-
-                # Ajout de logging détaillé
-                logger.debug(f"Réponse brute de l'API pour {plant.name}: '{translated_name}'")
 
                 # Vérifie si c'est une suggestion (entre parenthèses) ou une traduction certaine
                 is_suggestion = translated_name.startswith('(') and translated_name.endswith(')')
@@ -147,6 +158,7 @@ Plante inconnue →"""},
                     return None
 
             except Exception as e:
+                logger.error(f"Erreur lors de la traduction de {plant.name}: {str(e)}")
                 if "rate_limit" in str(e).lower():
                     if attempt < max_retries - 1:
                         wait_time = retry_delay * (3 ** attempt)  # backoff plus agressif (3 au lieu de 2)
