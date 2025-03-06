@@ -94,6 +94,7 @@ class Command(BaseCommand):
 - Proposer des noms basés uniquement sur des ressemblances linguistiques
 - Utiliser des synonymes non officiels
 - Ajouter des commentaires ou explications hors parenthèses
+- Renvoyer une chaine de caractère de plus de 220 caractères
 
 📌 Exemples EXACTS de réponses acceptées :
 Aloe vera → Aloès vera
