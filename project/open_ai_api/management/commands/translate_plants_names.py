@@ -136,7 +136,8 @@ Plante inconnue →"""},
                         logger.info(f"Nouvelle traduction : {plant.name} → {translated_name}")
                         self.success_count += 1
                     
-                    plant.french_name = translated_name
+                    # Nettoyage de la traduction avant de la sauvegarder
+                    plant.french_name = translated_name.replace(f"{plant.name} → ", "").strip()
                     return plant
                 else:
                     safe_print(f"- {plant.name:<40} → Non trouvé")
