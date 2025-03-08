@@ -52,6 +52,8 @@ def remede_form(request, id=None):
             form = RemedeForm(request.POST)
             if form.is_valid():
                 remede = form.save()
+                remede.created_by = request.user
+                remede.save()
                 url = reverse('select_plants_for_remede', kwargs={'remede_id': remede.id})
                 if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                     return HttpResponse(url)
