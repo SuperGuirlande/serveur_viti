@@ -34,9 +34,12 @@ def remede_form(request, id=None):
                 
                 # Sauvegarder le formulaire
                 remede = form.save()
+                remede.created_by = request.user
+                remede.save()
                 
                 # Réassigner les plantes
                 remede.plants.set(current_plants)
+                remede.save()
                 
                 url = reverse('all_remedes')
                 if request.headers.get('X-Requested-With') == 'XMLHttpRequest':

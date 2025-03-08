@@ -151,6 +151,7 @@ Tous les remèdes - Base de données interactive
 
             <!-- Actions -->
             <div class="flex flex-wrap gap-3">
+                {% if remede.created_by == request.user %}
                 <a href="{% url 'edit_remede' remede.id %}" class="action-button primary-button">
                     <i class="fa-solid fa-pen-to-square"></i>
                     <span>Modifier</span>
@@ -159,6 +160,7 @@ Tous les remèdes - Base de données interactive
                     <i class="fa-solid fa-leaf"></i>
                     <span>Plantes</span>
                 </a>
+                {% endif %}
                 <a href="{% url 'remede_detail' remede.id %}" class="action-button secondary-button">
                     <i class="fa-solid fa-eye"></i>
                     <span>Détails</span>
