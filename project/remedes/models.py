@@ -15,6 +15,9 @@ class Remede(models.Model):
 
     activities = models.ManyToManyField(Activity, related_name='remedes_used_in')
     plants = models.ManyToManyField(Plant, related_name='remedes_used_in', blank=True)
+    
+    # Stockage des paramètres de tri au format JSON
+    sort_params = models.JSONField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

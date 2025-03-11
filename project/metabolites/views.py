@@ -1,13 +1,17 @@
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import render, get_object_or_404, redirect
 from django.db.models import Count, Subquery, OuterRef, Prefetch
 from metabolites.models import Metabolite, MetaboliteActivity, MetabolitePlant, Plant, Activity
-from django.core.paginator import Paginator
+from django.core.paginator import Paginator, PageNotAnInteger, EmptyPage
 from django.contrib.auth.decorators import login_required
 from django.db import models, connection
 from .utils import log_execution_time
 import logging
 import time
 from django.core.cache import cache
+from django.conf import settings
+from django.http import JsonResponse
+from django.urls import reverse
+import json
 
 logger = logging.getLogger('metabolites')
 
@@ -172,118 +176,72 @@ def plant_detail(request, plant_id):
     logger.info(f"Accès aux détails de la plante {plant_id}")
     
     plant = get_object_or_404(Plant, id=plant_id)
-    activity_filter = request.GET.get('activity', None)
     
-    # Récupération des paramètres de tri pour les métabolites
-    sort_params = []
-    for i in range(3):
-        field = request.GET.get(f'sort{i}')
-        direction = request.GET.get(f'direction{i}')
-        if field and direction:
-            sort_params.append((field, direction))
+    # Récupérer les paramètres de tri et de pagination
+    metabolites_page = request.GET.get('metabolites_page', 1)
+    common_page = request.GET.get('common_page', 1)
+    activity_filter = request.GET.get('activity')
+    exclude_ubiquitous = request.GET.get('exclude_ubiquitous') == 'true'
     
-    # Récupération des paramètres de tri pour les métabolites en commun
+    # Construire les paramètres de tri pour les métabolites en commun
     common_sort_params = []
-    for i in range(4):
+    for i in range(5):
         field = request.GET.get(f'common_sort{i}')
         direction = request.GET.get(f'common_direction{i}')
         if field and direction:
             common_sort_params.append((field, direction))
     
-    logger.debug(f"Récupération des métabolites pour la plante {plant.name}")
-    metabolites_list = plant.get_metabolites_with_parts()
+    # Récupérer les métabolites de la plante
+    metabolites = plant.get_metabolites_with_parts()
     
-    # Application du tri multiple pour les métabolites
-    if sort_params:
-        def sort_key(item):
-            keys = []
-            for field, direction in sort_params:
-                value = item.get(field)
-                
-                # Gestion des valeurs numériques et nulles
-                if field in ['low', 'high', 'deviation']:
-                    try:
-                        if value is None or value == '-' or value == '':
-                            value = 0.0
-                        else:
-                            value = float(str(value).replace(',', '.'))
-                    except (ValueError, TypeError):
-                        value = 0.0
-                    
-                    if direction == 'desc':
-                        value = -value
-                
-                # Gestion des valeurs textuelles
-                else:
-                    if value is None or value == '-':
-                        value = ''
-                    
-                    if direction == 'desc':
-                        value = tuple(-ord(c) for c in str(value))
-                
-                keys.append(value)
-            return tuple(keys)
-        
-        metabolites_list = sorted(metabolites_list, key=sort_key)
+    # Paginer les résultats
+    paginator = Paginator(metabolites, 20)
+    try:
+        metabolites = paginator.page(metabolites_page)
+    except (PageNotAnInteger, EmptyPage):
+        metabolites = paginator.page(1)
     
-    # Pagination des métabolites
-    count_by_page = 20
-    metabolites_paginator = Paginator(metabolites_list, count_by_page)
-    metabolites_page = request.GET.get('metabolites_page', 1)
-    metabolites = metabolites_paginator.get_page(metabolites_page)
-    metabolites_start = (int(metabolites_page) - 1) * count_by_page
-    
-    # Récupère les plantes communes avec pagination SQL
-    common_page = int(request.GET.get('common_page', 1))
-    common_plants_data = plant.get_common_plants(
+    # Récupérer les plantes avec des métabolites en commun
+    common_plants = plant.get_common_plants(
         activity_filter=activity_filter,
-        page=common_page,
-        per_page=count_by_page,
-        sort_params=common_sort_params  # Passer les paramètres de tri
+        page=int(common_page),
+        per_page=20,
+        sort_params=common_sort_params,
+        exclude_ubiquitous=exclude_ubiquitous
     )
     
-    # Calcul des pourcentages pour les plantes de la page courante
-    for plant_data in common_plants_data['results']:
-        try:
-            if activity_filter:
-                total = plant_data.get('total_metabolites_count', 0)
-            else:
-                total = plant_data.get('total_metabolites_count', 0)
-            common = plant_data.get('common_metabolites_count', 0)
-            if total > 0:
-                percentage = (common * 100.0) / total
-                plant_data['common_metabolites_percentage'] = round(percentage, 1)
-            else:
-                plant_data['common_metabolites_percentage'] = 0.0
-        except (KeyError, TypeError):
-            plant_data['common_metabolites_percentage'] = 0.0
-
-    # Paramètres pour la pagination
+    # Récupérer le nombre de métabolites pour l'activité sélectionnée
+    metabolite_count_by_activity = None
+    if activity_filter:
+        metabolite_count_by_activity = plant.get_metabolites_by_activity(activity_filter)
+    
+    # Récupérer le nombre total de métabolites
+    count_metabolites = plant.all_metabolites_count
+    
+    # Construire les paramètres de requête pour la pagination
     query_params = request.GET.copy()
+    
+    # Supprimer les paramètres de pagination pour éviter les doublons
     if 'metabolites_page' in query_params:
         del query_params['metabolites_page']
     if 'common_page' in query_params:
         del query_params['common_page']
     
-    # Ajout du compte des métabolites avec l'activité spécifique
-    metabolite_count_by_activity = plant.get_metabolites_by_activity(activity_filter) if activity_filter else None
-    
-    logger.info(f"Fin du traitement pour la plante {plant.name}")
     context = {
-        'activities': Activity.objects.all(),
         'plant': plant,
-        'count_metabolites': plant.all_metabolites_count,
         'metabolites': metabolites,
-        'metabolites_start': metabolites_start,
-        'common_start': (common_page - 1) * count_by_page,
-        'common_plants': common_plants_data,
-        'activity_filter': activity_filter,
+        'metabolites_start': (metabolites.number - 1) * 20,
+        'common_plants': common_plants,
+        'common_start': (common_plants['page'] - 1) * 20,
+        'activities': Activity.objects.all(),
         'selected_activity': activity_filter,
-        'query_params': query_params.urlencode(),
-        'count_by_page': count_by_page,
+        'count_metabolites': count_metabolites,
         'metabolite_count_by_activity': metabolite_count_by_activity,
-        'current_sorts': sort_params,
-        'current_common_sorts': common_sort_params,
+        'query_params': query_params.urlencode(),
+        'debug_mode': settings.DEBUG,
+        'exclude_ubiquitous': exclude_ubiquitous,
+        'activity_filter': activity_filter,
+        'common_plants_count': common_plants['total_count'],
     }
     
     return render(request, 'metabolites/plant_detail.html', context)

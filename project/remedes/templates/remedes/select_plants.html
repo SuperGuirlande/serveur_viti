@@ -28,7 +28,7 @@ Sélection des plantes - Base de données interactive
         text-align: left;
         padding: 0.5rem 0.75rem;
         font-weight: 600;
-        font-size: 0.75rem;
+        font-size: 0.65rem;
         text-transform: uppercase;
         letter-spacing: 0.05em;
     }
@@ -40,11 +40,11 @@ Sélection des plantes - Base de données interactive
 
     .plant-table tr.selected-elsewhere {
         background-color: #f3f4f6;
-        opacity: 0.5;
+        opacity: 0.7;
     }
 
     .plant-table tr.selected-elsewhere label {
-        cursor: not-allowed;
+        cursor: pointer;
     }
 
     .plant-table td {
@@ -79,6 +79,56 @@ Sélection des plantes - Base de données interactive
     .concentration-low {
         background-color: #3b7e4610;
         color: #3b7e46;
+    }
+
+    .text-blue-600 {
+        color: #2563eb;
+    }
+
+    .text-green-600 {
+        color: #16a34a;
+    }
+
+    .pill-blue {
+        background-color: #2563eb20;
+        color: #2563eb;
+        border: 1px solid #2563eb40;
+    }
+    
+    .pill-green {
+        background-color: #16a34a20;
+        color: #16a34a;
+        border: 1px solid #16a34a40;
+    }
+    
+    .legend-container {
+        margin-top: 1rem;
+        padding: 0.75rem;
+        background-color: #f9fafb;
+        border-radius: 0.5rem;
+        border: 1px solid #e5e7eb;
+    }
+    
+    .legend-title {
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        font-size: 0.875rem;
+        color: #374151;
+    }
+    
+    .legend-item {
+        display: flex;
+        align-items: center;
+        margin-bottom: 0.25rem;
+        font-size: 0.75rem;
+        color: #4b5563;
+    }
+    
+    .legend-color {
+        width: 1rem;
+        height: 1rem;
+        border-radius: 0.25rem;
+        margin-right: 0.5rem;
     }
 
     .plant-row {
@@ -326,11 +376,11 @@ document.addEventListener('DOMContentLoaded', function() {
         checkboxes.forEach(checkbox => {
             if (checkbox.checked) {
                 const plantId = checkbox.value;
+                // Marquer les autres occurrences de la même plante comme sélectionnées ailleurs
                 plantRows[plantId].forEach(row => {
-                    row.classList.add('selected-elsewhere');
-                    const otherCheckbox = row.querySelector('.plant-checkbox');
-                    if (otherCheckbox !== checkbox) {
-                        otherCheckbox.disabled = true;
+                    if (row.querySelector('.plant-checkbox') !== checkbox) {
+                        row.classList.add('selected-elsewhere');
+                        // Ne pas désactiver la case à cocher pour permettre de la décocher
                     }
                 });
             }
@@ -341,21 +391,24 @@ document.addEventListener('DOMContentLoaded', function() {
             checkbox.addEventListener('change', function() {
                 const plantId = this.value;
                 const isChecked = this.checked;
+                
+                // Mettre à jour toutes les cases à cocher pour cette plante
                 plantRows[plantId].forEach(row => {
+                    const otherCheckbox = row.querySelector('.plant-checkbox');
+                    // Synchroniser l'état de toutes les cases à cocher pour cette plante
+                    if (otherCheckbox !== this) {
+                        otherCheckbox.checked = isChecked;
+                    }
+                    
+                    // Mettre à jour la classe CSS
                     if (isChecked) {
                         row.classList.add('selected-elsewhere');
-                        const otherCheckbox = row.querySelector('.plant-checkbox');
-                        if (otherCheckbox !== this) {
-                            otherCheckbox.disabled = true;
-                        }
                     } else {
                         row.classList.remove('selected-elsewhere');
-                        const otherCheckbox = row.querySelector('.plant-checkbox');
-                        if (otherCheckbox !== this) {
-                            otherCheckbox.disabled = false;
-                        }
                     }
                 });
+                
+                // Mettre à jour le récapitulatif
                 updateRecap();
             });
         });
@@ -382,6 +435,68 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     } catch (error) {
         console.error('Erreur lors de l\'initialisation:', error);
+    }
+});
+
+// Fonction pour mettre à jour les champs cachés du formulaire avec les paramètres de tri actuels
+function updateHiddenSortFields() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const form = document.getElementById('plants-form');
+    
+    // Supprimer les anciens champs cachés
+    const oldHiddenFields = form.querySelectorAll('input[name^="sort"], input[name^="direction"]');
+    oldHiddenFields.forEach(field => field.remove());
+    
+    // Ajouter les nouveaux champs cachés
+    for (let i = 0; i < 4; i++) {
+        const field = urlParams.get(`sort${i}`);
+        const direction = urlParams.get(`direction${i}`);
+        
+        if (field && direction) {
+            const fieldInput = document.createElement('input');
+            fieldInput.type = 'hidden';
+            fieldInput.name = `sort${i}`;
+            fieldInput.value = field;
+            form.appendChild(fieldInput);
+            
+            const directionInput = document.createElement('input');
+            directionInput.type = 'hidden';
+            directionInput.name = `direction${i}`;
+            directionInput.value = direction;
+            form.appendChild(directionInput);
+        }
+    }
+    
+    // Synchroniser l'état de la case à cocher d'exclusion des métabolites ubiquitaires
+    const excludeUbiquitousSort = document.getElementById('exclude_ubiquitous_sort');
+    const excludeUbiquitous = document.getElementById('exclude_ubiquitous');
+    
+    if (excludeUbiquitousSort && excludeUbiquitous) {
+        excludeUbiquitous.checked = excludeUbiquitousSort.checked;
+    }
+}
+
+// Mettre à jour les champs cachés au chargement de la page
+document.addEventListener('DOMContentLoaded', function() {
+    updateHiddenSortFields();
+    
+    // Mettre à jour les champs cachés lorsque l'URL change
+    window.addEventListener('popstate', updateHiddenSortFields);
+    
+    // Synchroniser les deux cases à cocher d'exclusion des métabolites ubiquitaires
+    const excludeUbiquitousSort = document.getElementById('exclude_ubiquitous_sort');
+    const excludeUbiquitous = document.getElementById('exclude_ubiquitous');
+    
+    if (excludeUbiquitousSort && excludeUbiquitous) {
+        excludeUbiquitousSort.addEventListener('change', function() {
+            excludeUbiquitous.checked = this.checked;
+            // Synchroniser les cases à cocher, mais ne pas soumettre le formulaire
+        });
+        
+        excludeUbiquitous.addEventListener('change', function() {
+            excludeUbiquitousSort.checked = this.checked;
+            // Synchroniser les cases à cocher, mais ne pas soumettre le formulaire
+        });
     }
 });
 </script>
@@ -480,7 +595,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 <i class="fa-solid fa-sort"></i>
                 Options de tri
             </h2>
-            <form id="sortForm" method="GET" class="space-y-4">
+            <form id="sortForm" method="GET" class="space-y-4" onsubmit="updateHiddenSortFields()">
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     <!-- Tri 1 -->
                     <div class="flex flex-col space-y-2">
@@ -489,6 +604,8 @@ document.addEventListener('DOMContentLoaded', function() {
                             <option value="name" {% if sort_params.0.0 == 'name' %}selected{% endif %}>Nom de la plante</option>
                             <option value="common_metabolites" {% if sort_params.0.0 == 'common_metabolites' %}selected{% endif %}>Nombre de métabolites en commun</option>
                             <option value="common_percentage" {% if sort_params.0.0 == 'common_percentage' %}selected{% endif %}>Pourcentage en commun</option>
+                            <option value="meta_percentage_score" {% if sort_params.0.0 == 'meta_percentage_score' %}selected{% endif %}>Meta%</option>
+                            <option value="meta_root_score" {% if sort_params.0.0 == 'meta_root_score' %}selected{% endif %}>MetaRacine</option>
                             <option value="common_activity_metabolites" {% if sort_params.0.0 == 'common_activity_metabolites' %}selected{% endif %}>Métabolites communs avec l'activité</option>
                             <option value="total_activity_metabolites" {% if sort_params.0.0 == 'total_activity_metabolites' %}selected{% endif %}>Total métabolites avec l'activité</option>
                             <option value="total_concentration" {% if sort_params.0.0 == 'total_concentration' %}selected{% endif %}>Concentration totale</option>
@@ -507,6 +624,8 @@ document.addEventListener('DOMContentLoaded', function() {
                             <option value="name" {% if sort_params.1.0 == 'name' %}selected{% endif %}>Nom de la plante</option>
                             <option value="common_metabolites" {% if sort_params.1.0 == 'common_metabolites' %}selected{% endif %}>Nombre de métabolites en commun</option>
                             <option value="common_percentage" {% if sort_params.1.0 == 'common_percentage' %}selected{% endif %}>Pourcentage en commun</option>
+                            <option value="meta_percentage_score" {% if sort_params.1.0 == 'meta_percentage_score' %}selected{% endif %}>Meta%</option>
+                            <option value="meta_root_score" {% if sort_params.1.0 == 'meta_root_score' %}selected{% endif %}>MetaRacine</option>
                             <option value="common_activity_metabolites" {% if sort_params.1.0 == 'common_activity_metabolites' %}selected{% endif %}>Métabolites communs avec l'activité</option>
                             <option value="total_activity_metabolites" {% if sort_params.1.0 == 'total_activity_metabolites' %}selected{% endif %}>Total métabolites avec l'activité</option>
                             <option value="total_concentration" {% if sort_params.1.0 == 'total_concentration' %}selected{% endif %}>Concentration totale</option>
@@ -525,6 +644,8 @@ document.addEventListener('DOMContentLoaded', function() {
                             <option value="name" {% if sort_params.2.0 == 'name' %}selected{% endif %}>Nom de la plante</option>
                             <option value="common_metabolites" {% if sort_params.2.0 == 'common_metabolites' %}selected{% endif %}>Nombre de métabolites en commun</option>
                             <option value="common_percentage" {% if sort_params.2.0 == 'common_percentage' %}selected{% endif %}>Pourcentage en commun</option>
+                            <option value="meta_percentage_score" {% if sort_params.2.0 == 'meta_percentage_score' %}selected{% endif %}>Meta%</option>
+                            <option value="meta_root_score" {% if sort_params.2.0 == 'meta_root_score' %}selected{% endif %}>MetaRacine</option>
                             <option value="common_activity_metabolites" {% if sort_params.2.0 == 'common_activity_metabolites' %}selected{% endif %}>Métabolites communs avec l'activité</option>
                             <option value="total_activity_metabolites" {% if sort_params.2.0 == 'total_activity_metabolites' %}selected{% endif %}>Total métabolites avec l'activité</option>
                             <option value="total_concentration" {% if sort_params.2.0 == 'total_concentration' %}selected{% endif %}>Concentration totale</option>
@@ -543,6 +664,8 @@ document.addEventListener('DOMContentLoaded', function() {
                             <option value="name" {% if sort_params.3.0 == 'name' %}selected{% endif %}>Nom de la plante</option>
                             <option value="common_metabolites" {% if sort_params.3.0 == 'common_metabolites' %}selected{% endif %}>Nombre de métabolites en commun</option>
                             <option value="common_percentage" {% if sort_params.3.0 == 'common_percentage' %}selected{% endif %}>Pourcentage en commun</option>
+                            <option value="meta_percentage_score" {% if sort_params.3.0 == 'meta_percentage_score' %}selected{% endif %}>Meta%</option>
+                            <option value="meta_root_score" {% if sort_params.3.0 == 'meta_root_score' %}selected{% endif %}>MetaRacine</option>
                             <option value="common_activity_metabolites" {% if sort_params.3.0 == 'common_activity_metabolites' %}selected{% endif %}>Métabolites communs avec l'activité</option>
                             <option value="total_activity_metabolites" {% if sort_params.3.0 == 'total_activity_metabolites' %}selected{% endif %}>Total métabolites avec l'activité</option>
                             <option value="total_concentration" {% if sort_params.3.0 == 'total_concentration' %}selected{% endif %}>Concentration totale</option>
@@ -554,6 +677,13 @@ document.addEventListener('DOMContentLoaded', function() {
                     </div>
                 </div>
 
+                <!-- Option pour exclure les métabolites ubiquitaires -->
+                <div class="flex items-center gap-3 mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                    <input type="checkbox" id="exclude_ubiquitous_sort" name="exclude_ubiquitous" value="true" {% if exclude_ubiquitous %}checked{% endif %} class="rounded border-gray-300 text-green-600 focus:ring-green-500">
+                    <label for="exclude_ubiquitous_sort" class="text-sm font-medium text-gray-700">Exclure les métabolites ubiquitaires</label>
+                    <span class="text-xs text-gray-500">Cette option permet d'exclure les métabolites présents dans de nombreuses plantes pour se concentrer sur les métabolites plus spécifiques.</span>
+                </div>
+
                 <div class="flex justify-end">
                     <button type="submit" class="bg-green-700 hover:bg-green-800 text-white px-6 py-3 rounded-lg shadow-md hover:shadow-lg transition-all duration-300 flex items-center gap-2">
                         <i class="fa-solid fa-sort"></i>
@@ -563,8 +693,23 @@ document.addEventListener('DOMContentLoaded', function() {
             </form>
         </div>
 
-        <form method="POST" class="space-y-12">
+        <form method="POST" class="space-y-12" id="plants-form">
             {% csrf_token %}
+            
+            <!-- Option pour exclure les métabolites ubiquitaires -->
+            <div class="bg-white shadow-md rounded-lg p-6 mb-8 hidden">
+                <div class="flex items-center gap-3">
+                    <input type="checkbox" id="exclude_ubiquitous" name="exclude_ubiquitous" value="true" {% if exclude_ubiquitous %}checked{% endif %} class="rounded border-gray-300 text-green-600 focus:ring-green-500">
+                    <label for="exclude_ubiquitous" class="text-sm font-medium text-gray-700">Exclure les métabolites ubiquitaires</label>
+                </div>
+                <p class="text-xs text-gray-500 mt-2 ml-6">Cette option permet d'exclure les métabolites présents dans de nombreuses plantes pour se concentrer sur les métabolites plus spécifiques.</p>
+            </div>
+            
+            <!-- Champs cachés pour les paramètres de tri -->
+            {% for param, value in sort_params %}
+                <input type="hidden" name="sort{{ forloop.counter0 }}" value="{{ param }}">
+                <input type="hidden" name="direction{{ forloop.counter0 }}" value="{{ value }}">
+            {% endfor %}
             
             {% for activity, plants in plants_by_activity.items %}
             <div class="activity-section">
@@ -575,16 +720,31 @@ document.addEventListener('DOMContentLoaded', function() {
                     </h2>
                 </div>
                 
+                <!-- Légende des couleurs -->
+                <div class="legend-container mb-4">
+                    <div class="legend-title">Légende des pourcentages :</div>
+                    <div class="legend-item">
+                        <div class="legend-color pill-blue"></div>
+                        <span>Bleu : % des métabolites communs par rapport au total des métabolites de la plante (quand la plante a moins de métabolites que la plante cible)</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color pill-green"></div>
+                        <span>Vert : % des métabolites communs par rapport au total des métabolites de la plante (quand la plante a plus de métabolites que la plante cible)</span>
+                    </div>
+                </div>
+                
                 <div class="overflow-x-auto">
                     <table class="plant-table">
                         <thead>
-                            <tr>
+                            <tr class="">
                                 <th class="w-16">Sélection</th>
                                 <th>Nom de la plante</th>
                                 <th>Nb métabolites (activité)</th>
                                 <th>Concentration totale</th>
                                 <th>Nb métabolites communs</th>
                                 <th>% en commun</th>
+                                <th>Meta%</th>
+                                <th>MetaRacine</th>
                                 <th>Nb métabolites communs (activité)</th>
                             </tr>
                         </thead>
@@ -602,11 +762,16 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <td>
                                     <label for="plant_{{ plant.id }}" class="font-medium text-green-700 hover:text-green-800 cursor-pointer">
                                         {{ plant.name }}
+                                        {% if plant.french_name %}
+                                        <span class="text-xs text-gray-500">
+                                            {{ plant.french_name }}
+                                        </span>
+                                        {% endif %}
                                     </label>
                                 </td>
                                 <td>
                                     <span class="concentration-badge concentration-medium">
-                                        {{ plant.activity_metabolites_count|default:"0" }} métabolite(s)
+                                        {{ plant.activity_metabolites_count|default:"0" }} 
                                     </span>
                                 </td>
                                 <td>
@@ -622,17 +787,27 @@ document.addEventListener('DOMContentLoaded', function() {
                                 </td>
                                 <td>
                                     <span class="concentration-badge concentration-medium">
-                                        {{ plant.common_metabolites_count|default:"0" }} métabolite(s)
+                                        {{ plant.common_metabolites_count|default:"0" }} 
                                     </span>
                                 </td>
                                 <td>
-                                    <span class="concentration-badge concentration-medium">
+                                    <span class="concentration-badge {% if plant.percentage_type == 'blue' %}pill-blue{% else %}pill-green{% endif %}">
                                         {{ plant.common_percentage|floatformat:1 }}%
                                     </span>
                                 </td>
                                 <td>
                                     <span class="concentration-badge concentration-medium">
-                                        {{ plant.common_activity_metabolites_count|default:"0" }} métabolite(s)
+                                        {{ plant.meta_percentage_score|floatformat:2 }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="concentration-badge concentration-medium">
+                                        {{ plant.meta_root_score|floatformat:2 }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="concentration-badge concentration-medium">
+                                        {{ plant.common_activity_metabolites_count|default:"0" }} 
                                     </span>
                                 </td>
                                 <td class="tooltip-cell">

@@ -206,28 +206,51 @@
         <div id="common-metabolites-content" class="overflow-x-auto hidden">
             {% if debug_mode %}
             <div class="bg-green-100 p-4 mb-4 rounded-xl">
-                <p>Nombre total de plantes avec métabolites en commun: {{ common_plants|length }}</p>
+                <p>Nombre total de plantes avec métabolites en commun: {{ common_plants_count }}</p>
             </div>
             {% endif %}
 
+            <!-- Légende des couleurs -->
+            <div class="legend-container mb-4">
+                <div class="legend-title">Légende des pourcentages :</div>
+                <div class="legend-item">
+                    <div class="legend-color pill-blue"></div>
+                    <span>Bleu : % des métabolites communs par rapport au total des métabolites de la plante (quand la plante a moins de métabolites que {{ plant.name }})</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color pill-green"></div>
+                    <span>Vert : % des métabolites communs par rapport au total des métabolites de la plante (quand la plante a plus de métabolites que {{ plant.name }})</span>
+                </div>
+            </div>
+
             <div class="activity-filter mb-6">
-                <form method="GET" class="flex gap-4 items-center">
-                    <select name="activity" class="rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500">
-                        <option value="">Toutes les activités</option>
-                        {% for activity in activities %}
-                        <option value="{{ activity.name }}" {% if activity.name == selected_activity %}selected{% endif %}>
-                            {{ activity.name }}
-                        </option>
-                        {% endfor %}    
-                    </select>
-                    <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors">
-                        Filtrer
-                    </button>
-                    {% if activity_filter %}
-                    <a href="{% url 'plant_detail' plant.id %}" class="text-gray-600 hover:text-gray-800">
-                        Réinitialiser
-                    </a>
-                    {% endif %}
+                <form method="GET" class="flex flex-wrap gap-4 items-center">
+                    <div class="flex items-center gap-2">
+                        <select name="activity" class="rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500">
+                            <option value="">Toutes les activités</option>
+                            {% for activity in activities %}
+                            <option value="{{ activity.name }}" {% if activity.name == selected_activity %}selected{% endif %}>
+                                {{ activity.name }}
+                            </option>
+                            {% endfor %}    
+                        </select>
+                    </div>
+                    
+                    <div class="flex items-center gap-2">
+                        <input type="checkbox" id="exclude_ubiquitous" name="exclude_ubiquitous" value="true" {% if exclude_ubiquitous %}checked{% endif %} class="rounded border-gray-300 text-green-600 focus:ring-green-500">
+                        <label for="exclude_ubiquitous" class="text-sm text-gray-700">Exclure les métabolites ubiquitaires</label>
+                    </div>
+                    
+                    <div>
+                        <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors">
+                            Filtrer
+                        </button>
+                        {% if activity_filter or exclude_ubiquitous %}
+                        <a href="{% url 'plant_detail' plant.id %}" class="ml-2 text-gray-600 hover:text-gray-800">
+                            Réinitialiser
+                        </a>
+                        {% endif %}
+                    </div>
                 </form>
             </div>
             
@@ -298,8 +321,10 @@
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             {{ common_plant.common_metabolites_count }}
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {{ common_plant.common_metabolites_percentage }}%
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            <span class="{% if common_plant.percentage_type == 'blue' %}pill-blue{% else %}pill-green{% endif %}">
+                                {{ common_plant.common_metabolites_percentage }}%
+                            </span>
                         </td>
                         {% if activity_filter %}
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -536,6 +561,54 @@
             color: #333;
             outline: none;
             transition: border-color 0.3s ease;
+        }
+        
+        .pill-blue {
+            background-color: #2563eb20;
+            color: #2563eb;
+            border: 1px solid #2563eb40;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.875rem;
+        }
+        
+        .pill-green {
+            background-color: #16a34a20;
+            color: #16a34a;
+            border: 1px solid #16a34a40;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.875rem;
+        }
+        
+        .legend-container {
+            margin-top: 1rem;
+            padding: 0.75rem;
+            background-color: #f9fafb;
+            border-radius: 0.5rem;
+            border: 1px solid #e5e7eb;
+        }
+        
+        .legend-title {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+            color: #374151;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0.25rem;
+            font-size: 0.75rem;
+            color: #4b5563;
+        }
+        
+        .legend-color {
+            width: 1rem;
+            height: 1rem;
+            border-radius: 0.25rem;
+            margin-right: 0.5rem;
         }
     </style>
 </div>

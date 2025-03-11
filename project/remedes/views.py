@@ -9,6 +9,7 @@ from .forms import RemedeForm
 from django.http import HttpResponse, JsonResponse
 from django.db import connection
 from metabolites.utils import log_execution_time
+import math
 
 logger = logging.getLogger('remedes')
 
@@ -74,18 +75,64 @@ def select_plants_for_remede(request, remede_id):
     remede = get_object_or_404(Remede.objects.prefetch_related('plants', 'activities'), id=remede_id)
     
     if request.method == 'POST':
+        # Récupérer les plantes sélectionnées depuis le formulaire
         selected_plants = request.POST.getlist('selected_plants')
+        logger.info(f"Plantes sélectionnées: {selected_plants}")
+        
+        # Récupérer l'option d'exclusion des métabolites ubiquitaires
+        exclude_ubiquitous = 'exclude_ubiquitous' in request.POST
+        logger.info(f"Exclusion des métabolites ubiquitaires: {exclude_ubiquitous}")
+        
+        # Sauvegarder les paramètres de tri actuels et l'option d'exclusion
+        sort_params_to_save = {'exclude_ubiquitous': exclude_ubiquitous}
+        for i in range(4):
+            field = request.POST.get(f'sort{i}')
+            direction = request.POST.get(f'direction{i}')
+            if field and direction:
+                sort_params_to_save[f'sort{i}'] = field
+                sort_params_to_save[f'direction{i}'] = direction
+        
+        # Sauvegarder dans le modèle Remede
+        remede.sort_params = sort_params_to_save
+        remede.save()
+        
+        # Mettre à jour les plantes du remède
         remede.plants.set(Plant.objects.filter(id__in=selected_plants))
+        logger.info(f"Remède mis à jour avec {len(selected_plants)} plantes")
+            
         return redirect('all_remedes')
     
     # Récupérer les paramètres de tri
     sort_params = []
+    exclude_ubiquitous = False
+    
+    # Vérifier si des paramètres de tri sont dans l'URL
+    has_url_sort_params = False
     for i in range(4):
         field = request.GET.get(f'sort{i}')
         direction = request.GET.get(f'direction{i}')
         if field and direction:
+            has_url_sort_params = True
             sort_params.append((field, direction))
-
+    
+    # Vérifier si l'option d'exclusion est dans l'URL
+    if 'exclude_ubiquitous' in request.GET:
+        exclude_ubiquitous = request.GET.get('exclude_ubiquitous') == 'true'
+        has_url_sort_params = True
+    
+    # Si aucun paramètre dans l'URL, utiliser ceux sauvegardés dans le modèle
+    if not has_url_sort_params and remede.sort_params:
+        for i in range(4):
+            field = remede.sort_params.get(f'sort{i}')
+            direction = remede.sort_params.get(f'direction{i}')
+            if field and direction:
+                sort_params.append((field, direction))
+        
+        # Récupérer l'option d'exclusion sauvegardée
+        if 'exclude_ubiquitous' in remede.sort_params:
+            exclude_ubiquitous = remede.sort_params['exclude_ubiquitous']
+    
+    # Si toujours aucun paramètre de tri, utiliser la valeur par défaut
     if not sort_params:
         sort_params = [('common_activity_metabolites', 'desc')]
     
@@ -93,7 +140,12 @@ def select_plants_for_remede(request, remede_id):
     plants_by_activity = {}
     
     # Clé de cache unique pour chaque combinaison de paramètres
-    cache_key = f'remede_plants_{remede_id}_{remede.target_plant.name}_{json.dumps(sort_params)}'
+    cache_key = f'remede_plants_{remede_id}_{remede.target_plant.name}_{json.dumps(sort_params)}_{exclude_ubiquitous}'
+    logger.debug(f"Clé de cache: {cache_key}")
+    
+    # Forcer l'invalidation du cache pour le débogage
+    cache.delete(cache_key)
+    
     plants_by_activity = cache.get(cache_key)
     
     if plants_by_activity is None:
@@ -106,6 +158,7 @@ def select_plants_for_remede(request, remede_id):
                     SELECT 
                         p.id,
                         p.name,
+                        p.french_name,
                         COUNT(DISTINCT mp.metabolite_id) as total_metabolites_count,
                         COUNT(DISTINCT CASE 
                             WHEN mp_target.metabolite_id IS NOT NULL 
@@ -158,9 +211,21 @@ def select_plants_for_remede(request, remede_id):
                         mp_target.plant_name = %s
                     LEFT JOIN metabolites_metaboliteactivity ma ON ma.metabolite_id = mp.metabolite_id
                     WHERE p.name != %s
-                    GROUP BY p.id, p.name
-                    HAVING activity_metabolites_count > 0 OR common_activity_metabolites_count > 0
                 """
+                
+                if exclude_ubiquitous:
+                    query += " AND m.is_ubiquitous = FALSE"
+                
+                query += """
+                    GROUP BY p.id, p.name
+                """
+                
+                # Ajouter la condition HAVING seulement si nécessaire
+                if not exclude_ubiquitous:
+                    query += " HAVING activity_metabolites_count > 0 OR common_activity_metabolites_count > 0"
+                else:
+                    # Condition moins restrictive lorsque les métabolites ubiquitaires sont exclus
+                    query += " HAVING total_metabolites_count > 0"
                 
                 # Construire la clause ORDER BY dynamiquement
                 order_by_clauses = []
@@ -171,6 +236,10 @@ def select_plants_for_remede(request, remede_id):
                         order_by_clauses.append(f"common_metabolites_count {direction}")
                     elif field == 'common_percentage':
                         order_by_clauses.append(f"(common_metabolites_count * 100.0 / NULLIF(total_metabolites_count, 0)) {direction}")
+                    elif field == 'meta_percentage_score':
+                        order_by_clauses.append(f"(common_metabolites_count * (common_metabolites_count * 100.0 / NULLIF(total_metabolites_count, 0)) / 100) {direction}")
+                    elif field == 'meta_root_score':
+                        order_by_clauses.append(f"(SQRT(common_metabolites_count) * (common_metabolites_count * 100.0 / NULLIF(total_metabolites_count, 0)) / 100) {direction}")
                     elif field == 'common_activity_metabolites':
                         order_by_clauses.append(f"common_activity_metabolites_count {direction}")
                     elif field == 'total_activity_metabolites':
@@ -182,6 +251,8 @@ def select_plants_for_remede(request, remede_id):
                     query += f" ORDER BY {', '.join(order_by_clauses)}"
                 
                 query += " LIMIT 20"
+                
+                logger.debug(f"Requête SQL pour l'activité {activity.name}: {query}")
                 
                 cursor.execute(query, [
                     activity.id,  # Pour le premier COUNT CASE
@@ -210,16 +281,47 @@ def select_plants_for_remede(request, remede_id):
                         else []
                     )
                     
-                    # Calculer le pourcentage en commun
-                    if result['total_metabolites_count'] > 0:
-                        result['common_percentage'] = round(
-                            (result['common_metabolites_count'] * 100.0) / result['total_metabolites_count'], 
-                            1
-                        )
+                    # Récupérer le nombre de métabolites de la plante cible
+                    target_plant_metabolites_count = None
+                    with connection.cursor() as count_cursor:
+                        count_query = """
+                            SELECT COUNT(DISTINCT mp.metabolite_id)
+                            FROM metabolites_metaboliteplant mp
+                            JOIN metabolites_metabolite m ON m.id = mp.metabolite_id
+                            WHERE mp.plant_name = %s
+                        """
+                        
+                        if exclude_ubiquitous:
+                            count_query += " AND m.is_ubiquitous = FALSE"
+                        
+                        logger.debug(f"Requête SQL pour compter les métabolites de la plante cible: {count_query}")
+                        
+                        count_cursor.execute(count_query, [remede.target_plant.name])
+                        target_plant_metabolites_count = count_cursor.fetchone()[0]
+                    
+                    # Calculer le pourcentage en commun avec la nouvelle méthode
+                    common_count = result['common_metabolites_count']
+                    plant_total = result['total_metabolites_count']
+                    
+                    # Toujours calculer par rapport à la plante affichée dans le tableau
+                    percentage = (common_count * 100.0) / plant_total if plant_total > 0 else 0
+                    
+                    # Conserver la distinction visuelle entre les cas
+                    if target_plant_metabolites_count >= plant_total:
+                        result['percentage_type'] = 'blue'
                     else:
-                        result['common_percentage'] = 0.0
+                        result['percentage_type'] = 'green'
+                    
+                    result['common_percentage'] = round(percentage, 1)
+                    
+                    # Calcul du score Meta% (S1) : Nombre de métabolites communs × Pourcentage de métabolites communs
+                    result['meta_percentage_score'] = round(common_count * (percentage / 100), 2)
+                    
+                    # Calcul du score MetaRacine (S2) : Racine carrée du nombre de métabolites communs × Pourcentage de métabolites communs
+                    result['meta_root_score'] = round(math.sqrt(common_count) * (percentage / 100), 2) if common_count > 0 else 0
                 
                 plants_by_activity[activity.name] = results
+                logger.debug(f"Activité {activity.name}: {len(results)} plantes récupérées")
 
         # Mettre en cache pour 1 heure
         cache.set(cache_key, plants_by_activity, 3600)
@@ -237,6 +339,7 @@ def select_plants_for_remede(request, remede_id):
             if plant_id not in all_plants_dict:
                 all_plants_dict[plant_id] = {
                     'name': plant['name'],
+                    'french_name': plant['french_name'],
                     'activities': {}
                 }
             all_plants_dict[plant_id]['activities'][activity_name] = {
@@ -252,7 +355,8 @@ def select_plants_for_remede(request, remede_id):
         'selected_plants_ids': selected_plants_ids,
         'sort_params': sort_params,
         'activities_json': json.dumps([activity.name for activity in remede.activities.all()]),
-        'all_plants_data_json': json.dumps(all_plants_dict, cls=DjangoJSONEncoder)
+        'all_plants_data_json': json.dumps(all_plants_dict, cls=DjangoJSONEncoder),
+        'exclude_ubiquitous': exclude_ubiquitous
     }
     
     return render(request, 'remedes/select_plants.html', context)
@@ -278,6 +382,7 @@ def remede_detail(request, remede_id):
                 SELECT 
                     p.id,
                     p.name,
+                    p.french_name,
                     COUNT(DISTINCT mp.metabolite_id) as total_metabolites_count,
                     COUNT(DISTINCT CASE 
                         WHEN mp_target.metabolite_id IS NOT NULL 

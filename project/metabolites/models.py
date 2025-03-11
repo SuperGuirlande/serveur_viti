@@ -334,20 +334,22 @@ class Plant(models.Model):
             logger.debug("Cache hit - Utilisation des données en cache")
         return result
 
-    def get_common_plants(self, activity_filter=None, page=1, per_page=50, sort_params=None):
+    def get_common_plants(self, activity_filter=None, page=1, per_page=50, sort_params=None, exclude_ubiquitous=False):
         """Version optimisée avec matérialisation des CTE et index"""
+        logger.info(f"Début get_common_plants pour la plante {self.name}")
         offset = (page - 1) * per_page
         
         # Construction de l'ordre SQL en fonction des paramètres de tri
         order_by = []
         if sort_params:
+            logger.info(f"Paramètres de tri reçus: {sort_params}")
             for field, direction in sort_params:
                 if field == 'name':
                     order_by.append(f"p.name {direction}")
                 elif field == 'common_metabolites':
                     order_by.append(f"common_metabolites_count {direction}")
                 elif field == 'common_percentage':
-                    order_by.append(f"(common_metabolites_count * 100.0 / NULLIF(t1.total_count, 0)) {direction}")
+                    order_by.append(f"CASE WHEN reference_count >= metabolites_total THEN (common_metabolites_count * 100.0 / NULLIF(metabolites_total, 0)) ELSE (common_metabolites_count * 100.0 / NULLIF(reference_count, 0)) END {direction}")
                 elif field == 'common_activity_metabolites' and activity_filter:
                     order_by.append(f"common_activity_metabolites_count {direction}")
                 elif field == 'total_activity_metabolites' and activity_filter:
@@ -361,28 +363,69 @@ class Plant(models.Model):
                 order_by = ["common_metabolites_count DESC"]
         
         order_by_clause = f"ORDER BY {', '.join(order_by)}"
+        logger.info(f"Clause ORDER BY finale: {order_by_clause}")
         
         with connection.cursor() as cursor:
+            # Récupérer d'abord le nombre de métabolites de la plante de référence
+            query_ref = """
+                SELECT COUNT(DISTINCT mp.metabolite_id)
+                FROM metabolites_metaboliteplant mp
+                JOIN metabolites_metabolite m ON m.id = mp.metabolite_id
+                WHERE mp.plant_name = %s
+            """
+            
+            if exclude_ubiquitous:
+                query_ref += " AND m.is_ubiquitous = FALSE"
+                
+            cursor.execute(query_ref, [self.name])
+            reference_count = cursor.fetchone()[0]
+            logger.info(f"Nombre de métabolites de la plante de référence ({self.name}): {reference_count}")
+
             if activity_filter:
                 # Créer les tables temporaires
-                cursor.execute("""
+                query_temp_ref = """
                     CREATE TEMPORARY TABLE IF NOT EXISTS temp_reference_metabolites AS
-                    SELECT DISTINCT metabolite_id
-                    FROM metabolites_metaboliteplant
-                    WHERE plant_name = %s
-                """, [self.name])
+                    SELECT DISTINCT mp.metabolite_id
+                    FROM metabolites_metaboliteplant mp
+                    JOIN metabolites_metabolite m ON m.id = mp.metabolite_id
+                    WHERE mp.plant_name = %s
+                """
+                
+                if exclude_ubiquitous:
+                    query_temp_ref += " AND m.is_ubiquitous = FALSE"
+                
+                cursor.execute(query_temp_ref, [self.name])
 
-                cursor.execute("""
+                query_temp_activity = """
                     CREATE TEMPORARY TABLE IF NOT EXISTS temp_activity_metabolites AS
                     SELECT DISTINCT mp.metabolite_id, mp.plant_name
                     FROM metabolites_metaboliteplant mp
                     JOIN metabolites_metaboliteactivity ma ON ma.metabolite_id = mp.metabolite_id
                     JOIN metabolites_activity a ON a.id = ma.activity_id
+                    JOIN metabolites_metabolite m ON m.id = mp.metabolite_id
                     WHERE a.name = %s
-                """, [activity_filter])
+                """
+                
+                if exclude_ubiquitous:
+                    query_temp_activity += " AND m.is_ubiquitous = FALSE"
+                
+                cursor.execute(query_temp_activity, [activity_filter])
 
                 # Requête principale avec tri dynamique
-                cursor.execute(f"""
+                query_main = f"""
+                    WITH plant_counts AS (
+                        SELECT plant_name, COUNT(DISTINCT mp.metabolite_id) as metabolites_total
+                        FROM metabolites_metaboliteplant mp
+                        JOIN metabolites_metabolite m ON m.id = mp.metabolite_id
+                        WHERE 1=1
+                """
+                
+                if exclude_ubiquitous:
+                    query_main += " AND m.is_ubiquitous = FALSE"
+                
+                query_main += f"""
+                        GROUP BY plant_name
+                    )
                     SELECT 
                         p.id,
                         p.name,
@@ -391,36 +434,49 @@ class Plant(models.Model):
                             WHEN am.metabolite_id IS NOT NULL 
                             THEN mp2.metabolite_id 
                         END) as common_activity_metabolites_count,
-                        t1.total_count as total_metabolites_count,
+                        pc.metabolites_total,
                         t2.activity_count as total_activity_metabolites_count,
-                        COUNT(*) OVER() as total_count
+                        COUNT(*) OVER() as pagination_total,
+                        """ + str(reference_count) + """ as reference_count
                     FROM metabolites_plant p
                     JOIN metabolites_metaboliteplant mp2 ON mp2.plant_name = p.name
                     JOIN temp_reference_metabolites rm ON rm.metabolite_id = mp2.metabolite_id
+                    JOIN plant_counts pc ON pc.plant_name = p.name
                     LEFT JOIN temp_activity_metabolites am ON am.metabolite_id = mp2.metabolite_id 
                         AND am.plant_name = p.name
-                    LEFT JOIN (
-                        SELECT plant_name, COUNT(DISTINCT metabolite_id) as total_count
-                        FROM metabolites_metaboliteplant
-                        GROUP BY plant_name
-                    ) t1 ON t1.plant_name = p.name
                     LEFT JOIN (
                         SELECT mp.plant_name, COUNT(DISTINCT ma.metabolite_id) as activity_count
                         FROM metabolites_metaboliteplant mp
                         JOIN metabolites_metaboliteactivity ma ON ma.metabolite_id = mp.metabolite_id
                         JOIN metabolites_activity a ON a.id = ma.activity_id
+                """
+                
+                if exclude_ubiquitous:
+                    query_main += """
+                        JOIN metabolites_metabolite m ON m.id = mp.metabolite_id
+                        WHERE a.name = %s AND m.is_ubiquitous = FALSE
+                    """
+                else:
+                    query_main += """
                         WHERE a.name = %s
+                    """
+                
+                query_main += """
                         GROUP BY mp.plant_name
                     ) t2 ON t2.plant_name = p.name
-                    WHERE p.name != %s
-                    GROUP BY p.id, p.name, t1.total_count, t2.activity_count
+                    WHERE p.name != %s AND pc.metabolites_total > 1
+                    GROUP BY p.id, p.name, pc.metabolites_total, t2.activity_count
                     HAVING COUNT(DISTINCT mp2.metabolite_id) > 0
-                    {order_by_clause}
-                    LIMIT %s OFFSET %s
-                """, [activity_filter, self.name, per_page, offset])
+                """
+                
+                query_main += f" {order_by_clause}"
+                query_main += " LIMIT %s OFFSET %s"
+                
+                cursor.execute(query_main, [activity_filter, self.name, per_page, offset])
 
                 columns = [col[0] for col in cursor.description]
                 results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+                logger.info(f"Nombre de résultats obtenus: {len(results)}")
 
                 # Nettoyer les tables temporaires
                 cursor.execute("DROP TEMPORARY TABLE IF EXISTS temp_reference_metabolites")
@@ -428,41 +484,87 @@ class Plant(models.Model):
 
             else:
                 # Version sans activité avec tri dynamique
-                cursor.execute("""
+                query_temp_ref = """
                     CREATE TEMPORARY TABLE IF NOT EXISTS temp_reference_metabolites AS
-                    SELECT DISTINCT metabolite_id
-                    FROM metabolites_metaboliteplant
-                    WHERE plant_name = %s
-                """, [self.name])
+                    SELECT DISTINCT mp.metabolite_id
+                    FROM metabolites_metaboliteplant mp
+                    JOIN metabolites_metabolite m ON m.id = mp.metabolite_id
+                    WHERE mp.plant_name = %s
+                """
+                
+                if exclude_ubiquitous:
+                    query_temp_ref += " AND m.is_ubiquitous = FALSE"
+                
+                cursor.execute(query_temp_ref, [self.name])
 
-                cursor.execute(f"""
+                query = f"""
+                    WITH plant_counts AS (
+                        SELECT plant_name, COUNT(DISTINCT mp.metabolite_id) as metabolites_total
+                        FROM metabolites_metaboliteplant mp
+                        JOIN metabolites_metabolite m ON m.id = mp.metabolite_id
+                        WHERE 1=1
+                """
+                
+                if exclude_ubiquitous:
+                    query += " AND m.is_ubiquitous = FALSE"
+                
+                query += f"""
+                        GROUP BY plant_name
+                    )
                     SELECT 
                         p.id,
                         p.name,
                         COUNT(DISTINCT mp2.metabolite_id) as common_metabolites_count,
-                        t1.total_count as total_metabolites_count,
-                        COUNT(*) OVER() as total_count
+                        pc.metabolites_total,
+                        COUNT(*) OVER() as pagination_total,
+                        """ + str(reference_count) + """ as reference_count
                     FROM metabolites_plant p
                     JOIN metabolites_metaboliteplant mp2 ON mp2.plant_name = p.name
                     JOIN temp_reference_metabolites rm ON rm.metabolite_id = mp2.metabolite_id
-                    LEFT JOIN (
-                        SELECT plant_name, COUNT(DISTINCT metabolite_id) as total_count
-                        FROM metabolites_metaboliteplant
-                        GROUP BY plant_name
-                    ) t1 ON t1.plant_name = p.name
-                    WHERE p.name != %s
-                    GROUP BY p.id, p.name, t1.total_count
+                    JOIN plant_counts pc ON pc.plant_name = p.name
+                    WHERE p.name != %s AND pc.metabolites_total > 1
+                    GROUP BY p.id, p.name, pc.metabolites_total
                     HAVING COUNT(DISTINCT mp2.metabolite_id) > 0
-                    {order_by_clause}
-                    LIMIT %s OFFSET %s
-                """, [self.name, per_page, offset])
+                """
+                
+                query += f" {order_by_clause}"
+                query += " LIMIT %s OFFSET %s"
+                logger.info(f"Exécution de la requête SQL: {query}")
+                cursor.execute(query, [self.name, per_page, offset])
 
                 columns = [col[0] for col in cursor.description]
                 results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+                logger.info(f"Nombre de résultats obtenus: {len(results)}")
 
                 cursor.execute("DROP TEMPORARY TABLE IF EXISTS temp_reference_metabolites")
             
-            total_count = results[0]['total_count'] if results else 0
+            # Calculer les pourcentages avec la nouvelle méthode
+            for result in results:
+                common_count = result['common_metabolites_count']
+                plant_total = result['metabolites_total']  # Utilisation du nouveau champ
+                
+                logger.info(f"\nCalcul pour la plante {result['name']}:")
+                logger.info(f"- Métabolites en commun: {common_count}")
+                logger.info(f"- Total métabolites de la plante: {plant_total}")
+                logger.info(f"- Total métabolites de référence: {reference_count}")
+                
+                # Déterminer quel calcul utiliser
+                # Toujours calculer par rapport à la plante affichée dans le tableau
+                percentage = (common_count * 100.0) / plant_total if plant_total > 0 else 0
+                
+                # Conserver la distinction visuelle entre les cas
+                if reference_count >= plant_total:
+                    result['percentage_type'] = 'blue'
+                    logger.info(f"- Cas BLEU: {common_count} * 100 / {plant_total} = {percentage}%")
+                else:
+                    result['percentage_type'] = 'green'
+                    logger.info(f"- Cas VERT: {common_count} * 100 / {plant_total} = {percentage}%")
+                
+                result['common_metabolites_percentage'] = round(percentage, 1)
+                logger.info(f"- Pourcentage final: {result['common_metabolites_percentage']}%")
+            
+            # Récupérer le total_count pour la pagination
+            total_count = results[0]['pagination_total'] if results else 0
             
             return {
                 'results': results,
