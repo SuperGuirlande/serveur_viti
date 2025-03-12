@@ -349,7 +349,13 @@ class Plant(models.Model):
                 elif field == 'common_metabolites':
                     order_by.append(f"common_metabolites_count {direction}")
                 elif field == 'common_percentage':
-                    order_by.append(f"CASE WHEN reference_count >= metabolites_total THEN (common_metabolites_count * 100.0 / NULLIF(metabolites_total, 0)) ELSE (common_metabolites_count * 100.0 / NULLIF(reference_count, 0)) END {direction}")
+                    order_by.append(f"""
+                        CASE 
+                            WHEN reference_count >= metabolites_total 
+                            THEN (common_metabolites_count * 100.0 / NULLIF(reference_count, 0))
+                            ELSE (common_metabolites_count * 100.0 / NULLIF(metabolites_total, 0))
+                        END {direction}
+                    """.replace('\n', ' ').strip())
                 elif field == 'common_activity_metabolites' and activity_filter:
                     order_by.append(f"common_activity_metabolites_count {direction}")
                 elif field == 'total_activity_metabolites' and activity_filter:
@@ -543,25 +549,26 @@ class Plant(models.Model):
                 common_count = result['common_metabolites_count']
                 plant_total = result['metabolites_total']  # Utilisation du nouveau champ
                 
-                logger.info(f"\nCalcul pour la plante {result['name']}:")
-                logger.info(f"- Métabolites en commun: {common_count}")
-                logger.info(f"- Total métabolites de la plante: {plant_total}")
-                logger.info(f"- Total métabolites de référence: {reference_count}")
-                
                 # Déterminer quel calcul utiliser
-                # Toujours calculer par rapport à la plante affichée dans le tableau
-                percentage = (common_count * 100.0) / plant_total if plant_total > 0 else 0
-                
-                # Conserver la distinction visuelle entre les cas
+                # Calculer le pourcentage par rapport à la plante cible (recherchée)
+                # au lieu de la plante affichée dans le tableau
                 if reference_count >= plant_total:
+                    # Cas bleu : la plante cible a plus de métabolites
+                    percentage = (common_count * 100.0) / reference_count if reference_count > 0 else 0
                     result['percentage_type'] = 'blue'
-                    logger.info(f"- Cas BLEU: {common_count} * 100 / {plant_total} = {percentage}%")
+                    logger.info(f"- Cas BLEU: {common_count} * 100 / {reference_count} = {percentage}%")
                 else:
+                    # Cas vert : la plante affichée a plus de métabolites
+                    percentage = (common_count * 100.0) / plant_total if plant_total > 0 else 0
                     result['percentage_type'] = 'green'
                     logger.info(f"- Cas VERT: {common_count} * 100 / {plant_total} = {percentage}%")
                 
                 result['common_metabolites_percentage'] = round(percentage, 1)
                 logger.info(f"- Pourcentage final: {result['common_metabolites_percentage']}%")
+            
+            # Filtrer les résultats pour exclure les plantes avec un seul métabolite
+            # et les plantes avec 100% de métabolites communs (qui sont probablement des plantes avec peu de métabolites)
+            results = [result for result in results if result['metabolites_total'] > 1 and result['common_metabolites_percentage'] < 100.0]
             
             # Récupérer le total_count pour la pagination
             total_count = results[0]['pagination_total'] if results else 0

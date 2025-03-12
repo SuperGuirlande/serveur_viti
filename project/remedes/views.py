@@ -218,14 +218,15 @@ def select_plants_for_remede(request, remede_id):
                 
                 query += """
                     GROUP BY p.id, p.name
+                    HAVING total_metabolites_count > 1
                 """
                 
                 # Ajouter la condition HAVING seulement si nécessaire
                 if not exclude_ubiquitous:
-                    query += " HAVING activity_metabolites_count > 0 OR common_activity_metabolites_count > 0"
+                    query += " AND (activity_metabolites_count > 0 OR common_activity_metabolites_count > 0)"
                 else:
                     # Condition moins restrictive lorsque les métabolites ubiquitaires sont exclus
-                    query += " HAVING total_metabolites_count > 0"
+                    query += " AND total_metabolites_count > 0"
                 
                 # Construire la clause ORDER BY dynamiquement
                 order_by_clauses = []
@@ -235,11 +236,55 @@ def select_plants_for_remede(request, remede_id):
                     elif field == 'common_metabolites':
                         order_by_clauses.append(f"common_metabolites_count {direction}")
                     elif field == 'common_percentage':
-                        order_by_clauses.append(f"(common_metabolites_count * 100.0 / NULLIF(total_metabolites_count, 0)) {direction}")
+                        order_by_clauses.append(f"""
+                            CASE 
+                                WHEN (SELECT COUNT(DISTINCT mp.metabolite_id) 
+                                      FROM metabolites_metaboliteplant mp 
+                                      JOIN metabolites_metabolite m ON m.id = mp.metabolite_id 
+                                      WHERE mp.plant_name = '{remede.target_plant.name}' 
+                                      {' AND m.is_ubiquitous = FALSE' if exclude_ubiquitous else ''}) >= total_metabolites_count 
+                                THEN (common_metabolites_count * 100.0 / NULLIF((SELECT COUNT(DISTINCT mp.metabolite_id) 
+                                                                                FROM metabolites_metaboliteplant mp 
+                                                                                JOIN metabolites_metabolite m ON m.id = mp.metabolite_id 
+                                                                                WHERE mp.plant_name = '{remede.target_plant.name}' 
+                                                                                {' AND m.is_ubiquitous = FALSE' if exclude_ubiquitous else ''}), 0))
+                                ELSE (common_metabolites_count * 100.0 / NULLIF(total_metabolites_count, 0))
+                            END {direction}
+                        """.replace('\n', ' ').strip())
                     elif field == 'meta_percentage_score':
-                        order_by_clauses.append(f"(common_metabolites_count * (common_metabolites_count * 100.0 / NULLIF(total_metabolites_count, 0)) / 100) {direction}")
+                        order_by_clauses.append(f"""
+                            common_metabolites_count * 
+                            CASE 
+                                WHEN (SELECT COUNT(DISTINCT mp.metabolite_id) 
+                                      FROM metabolites_metaboliteplant mp 
+                                      JOIN metabolites_metabolite m ON m.id = mp.metabolite_id 
+                                      WHERE mp.plant_name = '{remede.target_plant.name}' 
+                                      {' AND m.is_ubiquitous = FALSE' if exclude_ubiquitous else ''}) >= total_metabolites_count 
+                                THEN (common_metabolites_count / NULLIF((SELECT COUNT(DISTINCT mp.metabolite_id) 
+                                                                        FROM metabolites_metaboliteplant mp 
+                                                                        JOIN metabolites_metabolite m ON m.id = mp.metabolite_id 
+                                                                        WHERE mp.plant_name = '{remede.target_plant.name}' 
+                                                                        {' AND m.is_ubiquitous = FALSE' if exclude_ubiquitous else ''}), 0))
+                                ELSE (common_metabolites_count / NULLIF(total_metabolites_count, 0))
+                            END {direction}
+                        """.replace('\n', ' ').strip())
                     elif field == 'meta_root_score':
-                        order_by_clauses.append(f"(SQRT(common_metabolites_count) * (common_metabolites_count * 100.0 / NULLIF(total_metabolites_count, 0)) / 100) {direction}")
+                        order_by_clauses.append(f"""
+                            SQRT(common_metabolites_count) * 
+                            CASE 
+                                WHEN (SELECT COUNT(DISTINCT mp.metabolite_id) 
+                                      FROM metabolites_metaboliteplant mp 
+                                      JOIN metabolites_metabolite m ON m.id = mp.metabolite_id 
+                                      WHERE mp.plant_name = '{remede.target_plant.name}' 
+                                      {' AND m.is_ubiquitous = FALSE' if exclude_ubiquitous else ''}) >= total_metabolites_count 
+                                THEN (common_metabolites_count / NULLIF((SELECT COUNT(DISTINCT mp.metabolite_id) 
+                                                                        FROM metabolites_metaboliteplant mp 
+                                                                        JOIN metabolites_metabolite m ON m.id = mp.metabolite_id 
+                                                                        WHERE mp.plant_name = '{remede.target_plant.name}' 
+                                                                        {' AND m.is_ubiquitous = FALSE' if exclude_ubiquitous else ''}), 0))
+                                ELSE (common_metabolites_count / NULLIF(total_metabolites_count, 0))
+                            END {direction}
+                        """.replace('\n', ' ').strip())
                     elif field == 'common_activity_metabolites':
                         order_by_clauses.append(f"common_activity_metabolites_count {direction}")
                     elif field == 'total_activity_metabolites':
@@ -303,13 +348,15 @@ def select_plants_for_remede(request, remede_id):
                     common_count = result['common_metabolites_count']
                     plant_total = result['total_metabolites_count']
                     
-                    # Toujours calculer par rapport à la plante affichée dans le tableau
-                    percentage = (common_count * 100.0) / plant_total if plant_total > 0 else 0
-                    
-                    # Conserver la distinction visuelle entre les cas
+                    # Calculer le pourcentage par rapport à la plante cible (recherchée)
+                    # au lieu de la plante affichée dans le tableau
                     if target_plant_metabolites_count >= plant_total:
+                        # Cas bleu : la plante cible a plus de métabolites
+                        percentage = (common_count * 100.0) / target_plant_metabolites_count if target_plant_metabolites_count > 0 else 0
                         result['percentage_type'] = 'blue'
                     else:
+                        # Cas vert : la plante affichée a plus de métabolites
+                        percentage = (common_count * 100.0) / plant_total if plant_total > 0 else 0
                         result['percentage_type'] = 'green'
                     
                     result['common_percentage'] = round(percentage, 1)
@@ -319,6 +366,9 @@ def select_plants_for_remede(request, remede_id):
                     
                     # Calcul du score MetaRacine (S2) : Racine carrée du nombre de métabolites communs × Pourcentage de métabolites communs
                     result['meta_root_score'] = round(math.sqrt(common_count) * (percentage / 100), 2) if common_count > 0 else 0
+                
+                # Filtrer les résultats pour exclure les plantes avec un seul métabolite
+                results = [result for result in results if result['total_metabolites_count'] > 1]
                 
                 plants_by_activity[activity.name] = results
                 logger.debug(f"Activité {activity.name}: {len(results)} plantes récupérées")
