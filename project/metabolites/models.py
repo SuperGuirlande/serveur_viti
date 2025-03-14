@@ -4,6 +4,7 @@ from django.utils.functional import cached_property
 from django.core.cache import cache
 import logging
 from .utils import log_execution_time
+import math
 
 logger = logging.getLogger('metabolites')
 
@@ -356,6 +357,24 @@ class Plant(models.Model):
                             ELSE (common_metabolites_count * 100.0 / NULLIF(metabolites_total, 0))
                         END {direction}
                     """.replace('\n', ' ').strip())
+                elif field == 'meta_percentage_score':
+                    order_by.append(f"""
+                        common_metabolites_count * 
+                        CASE 
+                            WHEN reference_count >= metabolites_total 
+                            THEN (common_metabolites_count / NULLIF(reference_count, 0))
+                            ELSE (common_metabolites_count / NULLIF(metabolites_total, 0))
+                        END {direction}
+                    """.replace('\n', ' ').strip())
+                elif field == 'meta_root_score':
+                    order_by.append(f"""
+                        SQRT(common_metabolites_count) * 
+                        CASE 
+                            WHEN reference_count >= metabolites_total 
+                            THEN (common_metabolites_count / NULLIF(reference_count, 0))
+                            ELSE (common_metabolites_count / NULLIF(metabolites_total, 0))
+                        END {direction}
+                    """.replace('\n', ' ').strip())
                 elif field == 'common_activity_metabolites' and activity_filter:
                     order_by.append(f"common_activity_metabolites_count {direction}")
                 elif field == 'total_activity_metabolites' and activity_filter:
@@ -565,6 +584,15 @@ class Plant(models.Model):
                 
                 result['common_metabolites_percentage'] = round(percentage, 1)
                 logger.info(f"- Pourcentage final: {result['common_metabolites_percentage']}%")
+                
+                # Calcul du score Meta% (S1) : Nombre de métabolites communs × Pourcentage de métabolites communs
+                result['meta_percentage_score'] = round(common_count * (percentage / 100), 2)
+                
+                # Calcul du score MetaRacine (S2) : Racine carrée du nombre de métabolites communs × Pourcentage de métabolites communs
+                result['meta_root_score'] = round(math.sqrt(common_count) * (percentage / 100), 2) if common_count > 0 else 0
+                
+                logger.info(f"- Score Meta%: {result['meta_percentage_score']}")
+                logger.info(f"- Score MetaRacine: {result['meta_root_score']}")
             
             # Filtrer les résultats pour exclure les plantes avec un seul métabolite
             # et les plantes avec 100% de métabolites communs (qui sont probablement des plantes avec peu de métabolites)
