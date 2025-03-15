@@ -100,6 +100,20 @@ Sélection des plantes - Base de données interactive
         color: #16a34a;
         border: 1px solid #16a34a40;
     }
+
+    .pill-purple {
+        background-color: #8b5cf620;
+        color: #8b5cf6;
+        border: 1px solid #8b5cf640;
+    }
+
+    .pill-pink {
+        background-color: #ec489920;
+        color: #ec4899;
+        border: 1px solid #ec489940;
+    }
+    
+    
     
     .legend-container {
         margin-top: 1rem;
@@ -796,12 +810,12 @@ document.addEventListener('DOMContentLoaded', function() {
                                     </span>
                                 </td>
                                 <td>
-                                    <span class="concentration-badge concentration-medium">
+                                    <span class="concentration-badge concentration-medium pill-purple">
                                         {{ plant.meta_percentage_score|floatformat:2 }}
                                     </span>
                                 </td>
                                 <td>
-                                    <span class="concentration-badge concentration-medium">
+                                    <span class="concentration-badge concentration-medium pill-pink">
                                         {{ plant.meta_root_score|floatformat:2 }}
                                     </span>
                                 </td>

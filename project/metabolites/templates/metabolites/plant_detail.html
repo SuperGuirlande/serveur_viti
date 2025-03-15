@@ -347,13 +347,13 @@
                             </span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm">
-                            <span class="meta-score">
-                                {{ common_plant.meta_percentage_score|default:"-" }}
+                            <span class="concentration-badge concentration-medium pill-purple">
+                                {{ common_plant.meta_percentage_score|floatformat:2 }}
                             </span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm">
-                            <span class="meta-root-score">
-                                {{ common_plant.meta_root_score|default:"-" }}
+                            <span class="concentration-badge concentration-medium pill-pink">
+                                {{ common_plant.meta_root_score|floatformat:2 }}
                             </span>
                         </td>
                         {% if activity_filter %}
@@ -428,16 +428,36 @@
             // Récupérer les paramètres actuels de l'URL
             const urlParams = new URLSearchParams(window.location.search);
             
-            // Mettre à jour ou ajouter le paramètre de tri
-            if (direction) {
-                urlParams.set(`sort${priority}`, field);
-                urlParams.set(`direction${priority}`, direction);
-            } else {
+            // Si la direction est vide, supprimer ce niveau de tri
+            if (!direction) {
                 urlParams.delete(`sort${priority}`);
                 urlParams.delete(`direction${priority}`);
+                
+                // Réorganiser les tris restants
+                let sorts = [];
+                for (let i = 0; i < 3; i++) {
+                    if (i !== priority && urlParams.has(`sort${i}`) && urlParams.has(`direction${i}`)) {
+                        sorts.push({
+                            field: urlParams.get(`sort${i}`),
+                            direction: urlParams.get(`direction${i}`)
+                        });
+                        urlParams.delete(`sort${i}`);
+                        urlParams.delete(`direction${i}`);
+                    }
+                }
+                
+                // Réappliquer les tris dans l'ordre
+                sorts.forEach((sort, index) => {
+                    urlParams.set(`sort${index}`, sort.field);
+                    urlParams.set(`direction${index}`, sort.direction);
+                });
+            } else {
+                // Mettre à jour ou ajouter le nouveau tri
+                urlParams.set(`sort${priority}`, field);
+                urlParams.set(`direction${priority}`, direction);
             }
             
-            // Rediriger vers la nouvelle URL
+            // Rediriger vers la nouvelle URL avec les paramètres de tri mis à jour
             window.location.href = `${window.location.pathname}?${urlParams.toString()}`;
         }
 
@@ -448,22 +468,46 @@
             // Récupérer les paramètres actuels de l'URL
             const urlParams = new URLSearchParams(window.location.search);
             
-            // Déterminer l'index du paramètre de tri
-            let sortIndex = 0;
+            console.log('Tri demandé:', { field, direction });
+            console.log('Paramètres URL actuels:', Object.fromEntries(urlParams.entries()));
+            
+            // Supprimer tous les tris existants pour ce champ
             for (let i = 0; i < 5; i++) {
-                if (urlParams.has(`common_sort${i}`)) {
-                    sortIndex = i + 1;
+                if (urlParams.get(`common_sort${i}`) === field) {
+                    urlParams.delete(`common_sort${i}`);
+                    urlParams.delete(`common_direction${i}`);
                 }
             }
             
-            // Mettre à jour ou ajouter le paramètre de tri
-            if (direction) {
-                urlParams.set(`common_sort${sortIndex}`, field);
-                urlParams.set(`common_direction${sortIndex}`, direction);
+            // Trouver le prochain index disponible
+            let nextIndex = 0;
+            while (urlParams.has(`common_sort${nextIndex}`)) {
+                nextIndex++;
             }
             
+            // Ajouter le nouveau tri s'il y a une direction
+            if (direction) {
+                urlParams.set(`common_sort${nextIndex}`, field);
+                urlParams.set(`common_direction${nextIndex}`, direction);
+            }
+            
+            // Conserver l'activité sélectionnée
+            if (urlParams.has('activity')) {
+                const activity = urlParams.get('activity');
+                urlParams.set('activity', activity);
+            }
+            
+            // Ajouter le paramètre de défilement
+            urlParams.set('scroll', 'common-metabolites-content');
+            
+            // Réinitialiser la page
+            urlParams.delete('common_page');
+            
+            const newUrl = `${window.location.pathname}?${urlParams.toString()}`;
+            console.log('Nouvelle URL:', newUrl);
+            
             // Rediriger vers la nouvelle URL
-            window.location.href = `${window.location.pathname}?${urlParams.toString()}`;
+            window.location.href = newUrl;
         }
 
         // Initialiser les sélecteurs de tri avec les valeurs actuelles
@@ -550,58 +594,70 @@
         }
         
         .pill-blue {
-            background-color: #e6f0ff;
-            color: #0066cc;
+            background-color: #2563eb20;
+            color: #2563eb;
+            border: 1px solid #2563eb40;
             padding: 0.25rem 0.5rem;
-            border-radius: 9999px;
-            font-weight: 500;
+            border-radius: 0.25rem;
+            font-size: 0.875rem;
         }
         
         .pill-green {
-            background-color: #e6f7e6;
-            color: #008800;
+            background-color: #16a34a20;
+            color: #16a34a;
+            border: 1px solid #16a34a40;
             padding: 0.25rem 0.5rem;
-            border-radius: 9999px;
-            font-weight: 500;
+            border-radius: 0.25rem;
+            font-size: 0.875rem;
+        }
+
+        .pill-purple {
+            background-color: #8b5cf620;
+            color: #8b5cf6;
+            border: 1px solid #8b5cf640;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.875rem;
         }
         
+        .pill-pink {
+            background-color: #ec489920;
+            color: #ec4899;
+            border: 1px solid #ec489940;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.875rem;
+        }
+        
+        
         .legend-container {
-            background-color: #f9f9f9;
-            padding: 1rem;
+            margin-top: 1rem;
+            padding: 0.75rem;
+            background-color: #f9fafb;
             border-radius: 0.5rem;
-            margin-bottom: 1rem;
+            border: 1px solid #e5e7eb;
         }
         
         .legend-title {
             font-weight: 600;
             margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+            color: #374151;
         }
         
         .legend-item {
             display: flex;
             align-items: center;
             margin-bottom: 0.25rem;
+            font-size: 0.75rem;
+            color: #4b5563;
         }
         
         .legend-color {
             width: 1rem;
             height: 1rem;
-            border-radius: 9999px;
+            border-radius: 0.25rem;
             margin-right: 0.5rem;
-        }
-        .meta-score {
-            font-weight: 600;
-            background-color: #f0f7ff;
-            color: #2563eb;
-            padding: 0.25rem 0.5rem;
-            border-radius: 0.25rem;
-        }
-        .meta-root-score {
-            font-weight: 600;
-            background-color: #f0fff4;
-            color: #047857;
-            padding: 0.25rem 0.5rem;
-            border-radius: 0.25rem;
         }
     </style>
 </div>
