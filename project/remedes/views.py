@@ -9,7 +9,9 @@ from .forms import RemedeForm
 from django.http import HttpResponse, JsonResponse
 from django.db import connection
 from metabolites.utils import log_execution_time
+from metabolites.models import Metabolite
 import math
+from django.db.models import Q
 
 logger = logging.getLogger('remedes')
 
@@ -74,6 +76,24 @@ def select_plants_for_remede(request, remede_id):
     logger.info(f"Sélection des plantes pour le remède {remede_id}")
     remede = get_object_or_404(Remede.objects.prefetch_related('plants', 'activities'), id=remede_id)
     
+    # Récupérer tous les métabolites de manière optimisée
+    metabolites = Metabolite.objects.values('id', 'name').order_by('name').all()
+    logger.info(f"Nombre total de métabolites chargés : {metabolites.count()}")
+    
+    # Récupérer les métabolites sélectionnés
+    selected_metabolites = []
+    for i in range(1, 4):
+        metabolite_id = request.GET.get(f'metabolite{i}')
+        if not metabolite_id and remede.sort_params:
+            metabolite_id = remede.sort_params.get(f'metabolite{i}')
+        if metabolite_id:
+            try:
+                metabolite = Metabolite.objects.get(id=metabolite_id)
+                selected_metabolites.append(metabolite)
+                logger.info(f"Métabolite {i} sélectionné: {metabolite.name}")
+            except Metabolite.DoesNotExist:
+                logger.warning(f"Métabolite {i} non trouvé: {metabolite_id}")
+    
     if request.method == 'POST':
         # Récupérer les plantes sélectionnées depuis le formulaire
         selected_plants = request.POST.getlist('selected_plants')
@@ -85,6 +105,13 @@ def select_plants_for_remede(request, remede_id):
         
         # Sauvegarder les paramètres de tri actuels et l'option d'exclusion
         sort_params_to_save = {'exclude_ubiquitous': exclude_ubiquitous}
+        
+        # Ajouter les métabolites sélectionnés
+        for i in range(1, 4):
+            metabolite_id = request.POST.get(f'metabolite{i}')
+            if metabolite_id:
+                sort_params_to_save[f'metabolite{i}'] = metabolite_id
+        
         for i in range(4):
             field = request.POST.get(f'sort{i}')
             direction = request.POST.get(f'direction{i}')
@@ -140,192 +167,156 @@ def select_plants_for_remede(request, remede_id):
     plants_by_activity = {}
     
     # Clé de cache unique pour chaque combinaison de paramètres
-    cache_key = f'remede_plants_{remede_id}_{remede.target_plant.name}_{json.dumps(sort_params)}_{exclude_ubiquitous}'
+    cache_key = f'remede_plants_{remede_id}_{remede.target_plant.name}_{json.dumps(sort_params)}_{exclude_ubiquitous}_{json.dumps([m.id for m in selected_metabolites])}'
     logger.debug(f"Clé de cache: {cache_key}")
-    
-    # Forcer l'invalidation du cache pour le débogage
-    cache.delete(cache_key)
     
     plants_by_activity = cache.get(cache_key)
     
     if plants_by_activity is None:
         logger.debug("Cache miss - Exécution des requêtes SQL")
-        plants_by_activity = {}
-        
-        for activity in remede.activities.all():
-            with connection.cursor() as cursor:
-                query = """
-                    SELECT 
-                        p.id,
-                        p.name,
-                        p.french_name,
-                        COUNT(DISTINCT mp.metabolite_id) as total_metabolites_count,
-                        COUNT(DISTINCT CASE 
-                            WHEN mp_target.metabolite_id IS NOT NULL 
-                            THEN mp.metabolite_id 
-                        END) as common_metabolites_count,
-                        COUNT(DISTINCT CASE 
-                            WHEN ma.activity_id = %s 
-                            THEN mp.metabolite_id 
-                        END) as activity_metabolites_count,
-                        COUNT(DISTINCT CASE 
-                            WHEN mp_target.metabolite_id IS NOT NULL AND ma.activity_id = %s 
-                            THEN mp.metabolite_id 
-                        END) as common_activity_metabolites_count,
-                        COALESCE(SUM(
-                            CASE 
-                                WHEN ma.activity_id = %s
-                                THEN 
-                                    CASE 
-                                        WHEN mp.high IS NOT NULL THEN mp.high
-                                        WHEN mp.low IS NOT NULL THEN mp.low
-                                        ELSE 0 
-                                    END
-                                ELSE 0
-                            END
-                        ), 0) as total_concentration,
-                        GROUP_CONCAT(DISTINCT 
-                            CASE 
-                                WHEN mp_target.metabolite_id IS NOT NULL AND ma.activity_id = %s 
-                                THEN m.name 
-                            END
-                        ) as common_metabolites_names,
-                        GROUP_CONCAT(DISTINCT 
-                            CASE 
-                                WHEN ma.activity_id = %s 
-                                AND mp_target.metabolite_id IS NULL
-                                AND EXISTS (
-                                    SELECT 1 
-                                    FROM metabolites_metaboliteactivity ma2 
-                                    WHERE ma2.metabolite_id = mp.metabolite_id 
-                                    AND ma2.activity_id = %s
-                                )
-                                THEN m.name 
-                            END
-                        ) as complementary_metabolites_names
-                    FROM metabolites_plant p
-                    JOIN metabolites_metaboliteplant mp ON mp.plant_name = p.name
-                    JOIN metabolites_metabolite m ON m.id = mp.metabolite_id
-                    LEFT JOIN metabolites_metaboliteplant mp_target ON 
-                        mp_target.metabolite_id = mp.metabolite_id AND 
-                        mp_target.plant_name = %s
-                    LEFT JOIN metabolites_metaboliteactivity ma ON ma.metabolite_id = mp.metabolite_id
-                    WHERE p.name != %s
-                """
-                
-                if exclude_ubiquitous:
-                    query += " AND m.is_ubiquitous = FALSE"
-                
-                query += """
-                    GROUP BY p.id, p.name
-                """
-                
-                # Ajouter la condition HAVING seulement si nécessaire
-                if not exclude_ubiquitous:
-                    query += " HAVING activity_metabolites_count > 0 OR common_activity_metabolites_count > 0"
-                else:
-                    # Condition moins restrictive lorsque les métabolites ubiquitaires sont exclus
-                    query += " HAVING total_metabolites_count > 0"
-                
-                # Construire la clause ORDER BY dynamiquement
-                order_by_clauses = []
-                for field, direction in sort_params:
-                    if field == 'name':
-                        order_by_clauses.append(f"name {direction}")
-                    elif field == 'common_metabolites':
-                        order_by_clauses.append(f"common_metabolites_count {direction}")
-                    elif field == 'common_percentage':
-                        order_by_clauses.append(f"(common_metabolites_count * 100.0 / NULLIF(total_metabolites_count, 0)) {direction}")
-                    elif field == 'meta_percentage_score':
-                        order_by_clauses.append(f"(common_metabolites_count * (common_metabolites_count * 100.0 / NULLIF(total_metabolites_count, 0)) / 100) {direction}")
-                    elif field == 'meta_root_score':
-                        order_by_clauses.append(f"(SQRT(common_metabolites_count) * (common_metabolites_count * 100.0 / NULLIF(total_metabolites_count, 0)) / 100) {direction}")
-                    elif field == 'common_activity_metabolites':
-                        order_by_clauses.append(f"common_activity_metabolites_count {direction}")
-                    elif field == 'total_activity_metabolites':
-                        order_by_clauses.append(f"activity_metabolites_count {direction}")
-                    elif field == 'total_concentration':
-                        order_by_clauses.append(f"total_concentration {direction}")
-                
-                if order_by_clauses:
-                    query += f" ORDER BY {', '.join(order_by_clauses)}"
-                
-                query += " LIMIT 20"
-                
-                logger.debug(f"Requête SQL pour l'activité {activity.name}: {query}")
-                
-                cursor.execute(query, [
+        with connection.cursor() as cursor:
+            query = """
+            WITH target_metabolites AS (
+                SELECT DISTINCT mp.metabolite_id
+                FROM metabolites_metaboliteplant mp
+                JOIN metabolites_metabolite m ON m.id = mp.metabolite_id
+                WHERE mp.plant_name = %s
+                AND (%s = FALSE OR m.is_ubiquitous = FALSE)
+            ),
+            selected_metabolites AS (
+                SELECT DISTINCT id as metabolite_id
+                FROM metabolites_metabolite
+                WHERE id IN %s
+            ),
+            plant_metabolites AS (
+                SELECT 
+                    p.id,
+                    p.name,
+                    p.french_name,
+                    COUNT(DISTINCT mp.metabolite_id) as total_metabolites_count,
+                    COUNT(DISTINCT CASE WHEN tm.metabolite_id IS NOT NULL THEN mp.metabolite_id END) as common_metabolites_count,
+                    COUNT(DISTINCT CASE WHEN ma.activity_id = %s THEN mp.metabolite_id END) as activity_metabolites_count,
+                    COUNT(DISTINCT CASE WHEN tm.metabolite_id IS NOT NULL AND ma.activity_id = %s THEN mp.metabolite_id END) as common_activity_metabolites_count,
+                    COALESCE(SUM(CASE 
+                        WHEN ma.activity_id = %s 
+                        THEN COALESCE(mp.high, mp.low, 0) 
+                    END), 0) as total_concentration,
+                    GROUP_CONCAT(
+                        CASE WHEN tm.metabolite_id IS NOT NULL AND ma.activity_id = %s 
+                        THEN m.name 
+                        END
+                        ORDER BY m.name
+                        SEPARATOR ','
+                    ) as common_metabolites_names,
+                    GROUP_CONCAT(
+                        CASE WHEN ma.activity_id = %s AND tm.metabolite_id IS NULL 
+                        THEN m.name 
+                        END
+                        ORDER BY m.name
+                        SEPARATOR ','
+                    ) as complementary_metabolites_names,
+                    ROUND(
+                        COUNT(DISTINCT CASE WHEN tm.metabolite_id IS NOT NULL THEN mp.metabolite_id END) * 100.0 / 
+                        NULLIF(COUNT(DISTINCT mp.metabolite_id), 0),
+                        1
+                    ) as common_percentage,
+                    ROUND(
+                        COUNT(DISTINCT CASE WHEN tm.metabolite_id IS NOT NULL THEN mp.metabolite_id END) * 
+                        (COUNT(DISTINCT CASE WHEN tm.metabolite_id IS NOT NULL THEN mp.metabolite_id END) * 100.0 / 
+                        NULLIF(COUNT(DISTINCT mp.metabolite_id), 0)) / 100,
+                        2
+                    ) as meta_percentage_score,
+                    ROUND(
+                        SQRT(COUNT(DISTINCT CASE WHEN tm.metabolite_id IS NOT NULL THEN mp.metabolite_id END)) * 
+                        (COUNT(DISTINCT CASE WHEN tm.metabolite_id IS NOT NULL THEN mp.metabolite_id END) * 100.0 / 
+                        NULLIF(COUNT(DISTINCT mp.metabolite_id), 0)) / 100,
+                        2
+                    ) as meta_root_score
+                FROM metabolites_plant p
+                JOIN metabolites_metaboliteplant mp ON mp.plant_name = p.name
+                JOIN metabolites_metabolite m ON m.id = mp.metabolite_id
+                LEFT JOIN target_metabolites tm ON tm.metabolite_id = mp.metabolite_id
+                LEFT JOIN metabolites_metaboliteactivity ma ON ma.metabolite_id = mp.metabolite_id
+                WHERE p.name != %s
+                AND (
+                    NOT EXISTS (SELECT 1 FROM selected_metabolites)
+                    OR NOT EXISTS (
+                        SELECT 1 
+                        FROM selected_metabolites sm 
+                        WHERE NOT EXISTS (
+                            SELECT 1 
+                            FROM metabolites_metaboliteplant mp2 
+                            WHERE mp2.plant_name = p.name 
+                            AND mp2.metabolite_id = sm.metabolite_id
+                        )
+                    )
+                )
+                GROUP BY p.id, p.name, p.french_name
+            )
+            SELECT *
+            FROM plant_metabolites
+            ORDER BY 
+            """
+            
+            # Ajouter l'ordre de tri dynamique
+            order_clauses = []
+            for field, direction in sort_params:
+                if field == 'name':
+                    order_clauses.append(f"name {direction}")
+                elif field == 'common_metabolites':
+                    order_clauses.append(f"common_metabolites_count {direction}")
+                elif field == 'common_percentage':
+                    order_clauses.append(f"common_percentage {direction}")
+                elif field == 'meta_percentage_score':
+                    order_clauses.append(f"meta_percentage_score {direction}")
+                elif field == 'meta_root_score':
+                    order_clauses.append(f"meta_root_score {direction}")
+                elif field == 'common_activity_metabolites':
+                    order_clauses.append(f"common_activity_metabolites_count {direction}")
+                elif field == 'total_activity_metabolites':
+                    order_clauses.append(f"activity_metabolites_count {direction}")
+                elif field == 'total_concentration':
+                    order_clauses.append(f"total_concentration {direction}")
+            
+            query += ", ".join(order_clauses) if order_clauses else "common_activity_metabolites_count DESC"
+            query += " LIMIT 20"
+            
+            # Exécuter la requête pour chaque activité
+            plants_by_activity = {}
+            for activity in remede.activities.all():
+                # Construire les paramètres pour cette activité
+                metabolite_ids = tuple(m.id for m in selected_metabolites) if selected_metabolites else (0,)
+                params = [
+                    remede.target_plant.name,
+                    exclude_ubiquitous,
+                    metabolite_ids,
                     activity.id,  # Pour le premier COUNT CASE
                     activity.id,  # Pour le deuxième COUNT CASE
                     activity.id,  # Pour le CASE dans le SUM
                     activity.id,  # Pour le premier GROUP_CONCAT
-                    activity.id,  # Pour le premier CASE dans le deuxième GROUP_CONCAT
-                    activity.id,  # Pour le EXISTS dans le deuxième GROUP_CONCAT
-                    remede.target_plant.name,  # Pour le JOIN avec mp_target
-                    remede.target_plant.name,  # Pour WHERE p.name != %s
-                ])
+                    activity.id,  # Pour le deuxième GROUP_CONCAT
+                    remede.target_plant.name
+                ]
+
+                cursor.execute(query, params)
                 
+                # Traiter les résultats
                 columns = [col[0] for col in cursor.description]
                 results = [dict(zip(columns, row)) for row in cursor.fetchall()]
                 
-                # Traiter les noms des métabolites
+                # Traiter les listes de métabolites
                 for result in results:
-                    result['common_metabolites_names'] = (
-                        result['common_metabolites_names'].split(',')
-                        if result['common_metabolites_names']
-                        else []
-                    )
-                    result['complementary_metabolites_names'] = (
-                        result['complementary_metabolites_names'].split(',')
-                        if result['complementary_metabolites_names']
-                        else []
-                    )
+                    result['common_metabolites_names'] = result['common_metabolites_names'].split(',') if result['common_metabolites_names'] else []
+                    result['complementary_metabolites_names'] = result['complementary_metabolites_names'].split(',') if result['complementary_metabolites_names'] else []
                     
-                    # Récupérer le nombre de métabolites de la plante cible
-                    target_plant_metabolites_count = None
-                    with connection.cursor() as count_cursor:
-                        count_query = """
-                            SELECT COUNT(DISTINCT mp.metabolite_id)
-                            FROM metabolites_metaboliteplant mp
-                            JOIN metabolites_metabolite m ON m.id = mp.metabolite_id
-                            WHERE mp.plant_name = %s
-                        """
-                        
-                        if exclude_ubiquitous:
-                            count_query += " AND m.is_ubiquitous = FALSE"
-                        
-                        logger.debug(f"Requête SQL pour compter les métabolites de la plante cible: {count_query}")
-                        
-                        count_cursor.execute(count_query, [remede.target_plant.name])
-                        target_plant_metabolites_count = count_cursor.fetchone()[0]
-                    
-                    # Calculer le pourcentage en commun avec la nouvelle méthode
-                    common_count = result['common_metabolites_count']
-                    plant_total = result['total_metabolites_count']
-                    
-                    # Toujours calculer par rapport à la plante affichée dans le tableau
-                    percentage = (common_count * 100.0) / plant_total if plant_total > 0 else 0
-                    
-                    # Conserver la distinction visuelle entre les cas
-                    if target_plant_metabolites_count >= plant_total:
-                        result['percentage_type'] = 'blue'
-                    else:
-                        result['percentage_type'] = 'green'
-                    
-                    result['common_percentage'] = round(percentage, 1)
-                    
-                    # Calcul du score Meta% (S1) : Nombre de métabolites communs × Pourcentage de métabolites communs
-                    result['meta_percentage_score'] = round(common_count * (percentage / 100), 2)
-                    
-                    # Calcul du score MetaRacine (S2) : Racine carrée du nombre de métabolites communs × Pourcentage de métabolites communs
-                    result['meta_root_score'] = round(math.sqrt(common_count) * (percentage / 100), 2) if common_count > 0 else 0
+                    # Déterminer le type de pourcentage
+                    result['percentage_type'] = 'blue' if result['total_metabolites_count'] <= result['common_metabolites_count'] else 'green'
                 
                 plants_by_activity[activity.name] = results
-                logger.debug(f"Activité {activity.name}: {len(results)} plantes récupérées")
-
-        # Mettre en cache pour 1 heure
-        cache.set(cache_key, plants_by_activity, 3600)
-        logger.debug("Résultats mis en cache")
+            
+            # Mettre en cache pour 24h
+            cache.set(cache_key, plants_by_activity, 86400)
+            logger.debug("Résultats mis en cache")
     else:
         logger.debug("Cache hit - Utilisation des données en cache")
 
@@ -356,7 +347,9 @@ def select_plants_for_remede(request, remede_id):
         'sort_params': sort_params,
         'activities_json': json.dumps([activity.name for activity in remede.activities.all()]),
         'all_plants_data_json': json.dumps(all_plants_dict, cls=DjangoJSONEncoder),
-        'exclude_ubiquitous': exclude_ubiquitous
+        'exclude_ubiquitous': exclude_ubiquitous,
+        'metabolites': metabolites,
+        'selected_metabolites': selected_metabolites
     }
     
     return render(request, 'remedes/select_plants.html', context)
@@ -521,3 +514,18 @@ def delete_remede(request, remede_id):
         remede.delete()
         return JsonResponse({'status': 'success', 'redirect_url': reverse('all_remedes')})
     return JsonResponse({'status': 'error'}, status=400)
+
+def search_metabolites(request):
+    query = request.GET.get('q', '')
+    metabolite_id = request.GET.get('id')
+    
+    if metabolite_id:
+        # Recherche par ID
+        metabolites = Metabolite.objects.filter(id=metabolite_id).values('id', 'name')
+    else:
+        # Recherche par nom
+        metabolites = Metabolite.objects.filter(
+            name__icontains=query
+        ).values('id', 'name')[:20]  # Limite à 20 résultats pour la performance
+    
+    return JsonResponse(list(metabolites), safe=False)

@@ -182,6 +182,11 @@ def plant_detail(request, plant_id):
     common_page = request.GET.get('common_page', 1)
     activity_filter = request.GET.get('activity')
     exclude_ubiquitous = request.GET.get('exclude_ubiquitous') == 'true'
+    search_text = request.GET.get('search_text', '')
+    search_type = request.GET.get('search_type', 'contains')
+    metabolite_filter_1 = request.GET.get('metabolite_filter_1')
+    metabolite_filter_2 = request.GET.get('metabolite_filter_2')
+    metabolite_filter_3 = request.GET.get('metabolite_filter_3')
     
     # Construire les paramètres de tri pour les métabolites en commun
     common_sort_params = []
@@ -207,7 +212,10 @@ def plant_detail(request, plant_id):
         page=int(common_page),
         per_page=20,
         sort_params=common_sort_params,
-        exclude_ubiquitous=exclude_ubiquitous
+        exclude_ubiquitous=exclude_ubiquitous,
+        search_text=search_text,
+        search_type=search_type,
+        metabolite_filters=[metabolite_filter_1, metabolite_filter_2, metabolite_filter_3]
     )
     
     # Récupérer le nombre de métabolites pour l'activité sélectionnée
@@ -220,8 +228,6 @@ def plant_detail(request, plant_id):
     
     # Construire les paramètres de requête pour la pagination
     query_params = request.GET.copy()
-    
-    # Supprimer les paramètres de pagination pour éviter les doublons
     if 'metabolites_page' in query_params:
         del query_params['metabolites_page']
     if 'common_page' in query_params:
@@ -242,6 +248,12 @@ def plant_detail(request, plant_id):
         'exclude_ubiquitous': exclude_ubiquitous,
         'activity_filter': activity_filter,
         'common_plants_count': common_plants['total_count'],
+        'search_text': search_text,
+        'search_type': search_type,
+        'all_metabolites': Metabolite.objects.all().order_by('name'),
+        'selected_metabolite_1': metabolite_filter_1,
+        'selected_metabolite_2': metabolite_filter_2,
+        'selected_metabolite_3': metabolite_filter_3,
     }
     
     return render(request, 'metabolites/plant_detail.html', context)

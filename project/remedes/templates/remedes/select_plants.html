@@ -5,6 +5,8 @@ Sélection des plantes - Base de données interactive
 {% endblock %}
 
 {% block extra_head %}
+{{ block.super }}
+{{ remede.sort_params|json_script:"remede-sort-params" }}
 <style>
     .activity-section {
         margin-bottom: 1rem;
@@ -40,11 +42,14 @@ Sélection des plantes - Base de données interactive
 
     .plant-table tr.selected-elsewhere {
         background-color: #f3f4f6;
-        opacity: 0.7;
     }
 
     .plant-table tr.selected-elsewhere label {
         cursor: pointer;
+    }
+
+    .plant-table tr.selected-elsewhere .metabolites-tooltip {
+        opacity: 1 !important;
     }
 
     .plant-table td {
@@ -254,9 +259,22 @@ Sélection des plantes - Base de données interactive
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     try {
-        const allPlantsData = {{ all_plants_data_json|safe }};
-        console.log('All Plants Data:', allPlantsData);
-        const activities = {{ activities_json|safe }};
+        // Parse les données JSON de manière sécurisée
+        let allPlantsData = {};
+        let activities = [];
+        
+        try {
+            allPlantsData = JSON.parse('{{ all_plants_data_json|escapejs }}');
+        } catch (e) {
+            console.error('Erreur lors du parsing des données des plantes:', e);
+        }
+        
+        try {
+            activities = JSON.parse('{{ activities_json|escapejs }}');
+        } catch (e) {
+            console.error('Erreur lors du parsing des activités:', e);
+        }
+
         const checkboxes = document.querySelectorAll('.plant-checkbox');
         const plantRows = {};
         const recapSection = document.getElementById('selected-plants-recap');
@@ -447,6 +465,136 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
         });
+
+        // Fonction pour charger les métabolites
+        async function loadMetabolites(searchTerm, selectId) {
+            try {
+                const response = await fetch(`{% url 'search_metabolites' %}?q=${encodeURIComponent(searchTerm)}`);
+                const data = await response.json();
+                
+                const select = document.getElementById(selectId);
+                select.innerHTML = '<option value="">Sélectionnez un métabolite...</option>';
+                
+                data.forEach(metabolite => {
+                    const option = document.createElement('option');
+                    option.value = metabolite.id;
+                    option.textContent = metabolite.name;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Erreur lors du chargement des métabolites:', error);
+            }
+        }
+
+        // Gérer la recherche pour chaque select
+        for (let i = 1; i <= 3; i++) {
+            const searchInput = document.getElementById(`search${i}`);
+            const select = document.getElementById(`metabolite${i}`);
+            let timeoutId;
+
+            // Fonction pour mettre à jour le select
+            function updateSelect(value) {
+                clearTimeout(timeoutId);
+                timeoutId = setTimeout(() => {
+                    loadMetabolites(value, `metabolite${i}`);
+                }, 300);
+            }
+
+            // Écouter les changements de valeur (saisie manuelle)
+            searchInput.addEventListener('input', function() {
+                updateSelect(this.value);
+            });
+
+            // Écouter les changements programmatiques
+            const observer = new MutationObserver(function(mutations) {
+                mutations.forEach(function(mutation) {
+                    if (mutation.type === 'attributes' && mutation.attributeName === 'value') {
+                        updateSelect(searchInput.value);
+                    }
+                });
+            });
+
+            observer.observe(searchInput, {
+                attributes: true,
+                attributeFilter: ['value']
+            });
+
+            // Charger les métabolites initiaux et pré-sélectionner la valeur
+            const selectedValue = select.value;
+            if (selectedValue) {
+                // Charger tous les métabolites
+                loadMetabolites('', `metabolite${i}`).then(() => {
+                    // Sélectionner la valeur
+                    select.value = selectedValue;
+                    // Trouver le nom du métabolite sélectionné
+                    const selectedOption = select.options[select.selectedIndex];
+                    if (selectedOption) {
+                        // Pré-remplir le champ de recherche
+                        searchInput.value = selectedOption.text;
+                        // Mettre à jour le select avec le nom
+                        updateSelect(selectedOption.text);
+                    }
+                });
+            }
+        }
+
+        // Pré-remplir les champs avec les valeurs de l'URL
+        const urlParams = new URLSearchParams(window.location.search);
+        for (let i = 1; i <= 3; i++) {
+            const metaboliteId = urlParams.get(`metabolite${i}`);
+            if (metaboliteId) {
+                const select = document.getElementById(`metabolite${i}`);
+                const searchInput = document.getElementById(`search${i}`);
+                
+                // D'abord, charger le métabolite spécifique
+                fetch(`{% url 'search_metabolites' %}?id=${metaboliteId}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.length > 0) {
+                            const metabolite = data[0];
+                            // Mettre le nom dans le champ de recherche
+                            searchInput.value = metabolite.name;
+                            // Mettre à jour le select avec le nom
+                            loadMetabolites(metabolite.name, `metabolite${i}`).then(() => {
+                                // Une fois les métabolites chargés, sélectionner le bon
+                                select.value = metaboliteId;
+                            });
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Erreur lors du chargement du métabolite:', error);
+                    });
+            }
+        }
+
+        // Pré-remplir les champs avec les valeurs des sort_params du remède
+        const remedeSortParams = JSON.parse(document.getElementById('remede-sort-params').textContent);
+        for (let i = 1; i <= 3; i++) {
+            const metaboliteId = remedeSortParams[`metabolite${i}`];
+            if (metaboliteId && !urlParams.get(`metabolite${i}`)) {  // Ne pas écraser si déjà dans l'URL
+                const select = document.getElementById(`metabolite${i}`);
+                const searchInput = document.getElementById(`search${i}`);
+                
+                // D'abord, charger le métabolite spécifique
+                fetch(`{% url 'search_metabolites' %}?id=${metaboliteId}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.length > 0) {
+                            const metabolite = data[0];
+                            // Mettre le nom dans le champ de recherche
+                            searchInput.value = metabolite.name;
+                            // Mettre à jour le select avec le nom
+                            loadMetabolites(metabolite.name, `metabolite${i}`).then(() => {
+                                // Une fois les métabolites chargés, sélectionner le bon
+                                select.value = metaboliteId;
+                            });
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Erreur lors du chargement du métabolite:', error);
+                    });
+            }
+        }
     } catch (error) {
         console.error('Erreur lors de l\'initialisation:', error);
     }
@@ -504,12 +652,24 @@ document.addEventListener('DOMContentLoaded', function() {
     if (excludeUbiquitousSort && excludeUbiquitous) {
         excludeUbiquitousSort.addEventListener('change', function() {
             excludeUbiquitous.checked = this.checked;
-            // Synchroniser les cases à cocher, mais ne pas soumettre le formulaire
         });
         
         excludeUbiquitous.addEventListener('change', function() {
             excludeUbiquitousSort.checked = this.checked;
-            // Synchroniser les cases à cocher, mais ne pas soumettre le formulaire
+        });
+    }
+
+    // Mettre à jour les champs cachés des métabolites avant la soumission du formulaire
+    const plantsForm = document.getElementById('plants-form');
+    if (plantsForm) {
+        plantsForm.addEventListener('submit', function() {
+            for (let i = 1; i <= 3; i++) {
+                const select = document.getElementById(`metabolite${i}`);
+                const hiddenInput = document.getElementById(`hidden_metabolite${i}`);
+                if (select && hiddenInput) {
+                    hiddenInput.value = select.value;
+                }
+            }
         });
     }
 });
@@ -698,6 +858,54 @@ document.addEventListener('DOMContentLoaded', function() {
                     <span class="text-xs text-gray-500">Cette option permet d'exclure les métabolites présents dans de nombreuses plantes pour se concentrer sur les métabolites plus spécifiques.</span>
                 </div>
 
+                <!-- Sélection des métabolites -->
+                <div class="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                    <h3 class="text-sm font-medium text-gray-700 mb-3">Sélection des métabolites</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <!-- Métabolite 1 -->
+                        <div>
+                            <label for="metabolite1" class="block text-sm font-medium text-gray-700 mb-2">Métabolite 1</label>
+                            <div class="relative">
+                                <input type="text" 
+                                       id="search1" 
+                                       class="form-input w-full rounded-md border-gray-300 mb-2" 
+                                       placeholder="Rechercher un métabolite...">
+                                <select id="metabolite1" name="metabolite1" class="form-select w-full rounded-md border-gray-300">
+                                    <option value="">Sélectionnez un métabolite...</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Métabolite 2 -->
+                        <div>
+                            <label for="metabolite2" class="block text-sm font-medium text-gray-700 mb-2">Métabolite 2</label>
+                            <div class="relative">
+                                <input type="text" 
+                                       id="search2" 
+                                       class="form-input w-full rounded-md border-gray-300 mb-2" 
+                                       placeholder="Rechercher un métabolite...">
+                                <select id="metabolite2" name="metabolite2" class="form-select w-full rounded-md border-gray-300">
+                                    <option value="">Sélectionnez un métabolite...</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Métabolite 3 -->
+                        <div>
+                            <label for="metabolite3" class="block text-sm font-medium text-gray-700 mb-2">Métabolite 3</label>
+                            <div class="relative">
+                                <input type="text" 
+                                       id="search3" 
+                                       class="form-input w-full rounded-md border-gray-300 mb-2" 
+                                       placeholder="Rechercher un métabolite...">
+                                <select id="metabolite3" name="metabolite3" class="form-select w-full rounded-md border-gray-300">
+                                    <option value="">Sélectionnez un métabolite...</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="flex justify-end">
                     <button type="submit" class="bg-green-700 hover:bg-green-800 text-white px-6 py-3 rounded-lg shadow-md hover:shadow-lg transition-all duration-300 flex items-center gap-2">
                         <i class="fa-solid fa-sort"></i>
@@ -723,6 +931,11 @@ document.addEventListener('DOMContentLoaded', function() {
             {% for param, value in sort_params %}
                 <input type="hidden" name="sort{{ forloop.counter0 }}" value="{{ param }}">
                 <input type="hidden" name="direction{{ forloop.counter0 }}" value="{{ value }}">
+            {% endfor %}
+            
+            <!-- Champs cachés pour les métabolites -->
+            {% for i in "123" %}
+                <input type="hidden" name="metabolite{{ i }}" id="hidden_metabolite{{ i }}">
             {% endfor %}
             
             {% for activity, plants in plants_by_activity.items %}

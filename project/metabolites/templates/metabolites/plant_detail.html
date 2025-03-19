@@ -6,7 +6,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="container mx-auto px-4 py-8 max-w-7xl">
+<div class="container mx-auto px-4 py-8 max-w-[1600px]">
     <!-- En-tête de la plante -->
     <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
         <h1 class="text-3xl font-bold text-center text-green-700 mb-4">
@@ -124,7 +124,7 @@
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
                     {% for metabolite in metabolites %}
-                    <tr class="hover:bg-gray-50 cursor-pointer" onclick="window.location='{% url 'metabolite_detail' metabolite.metabolite_id %}';">
+                    <tr class="hover:bg-gray-50 cursor-pointer" onclick="window.location='{% url 'metabolite_detail' metabolite.metabolite_id %}'">
                         <td class="px-6 py-4 text-wrap text-sm font-medium text-gray-900">
                             <span class="text-gray-600 text-xs font-light">{{ forloop.counter|add:metabolites_start }}.</span> 
                             <span class="text-green-700">{{ metabolite.metabolite__name }}</span>
@@ -224,9 +224,11 @@
             </div>
 
             <div class="activity-filter mb-6">
-                <form method="GET" class="flex flex-wrap gap-4 items-center">
+                <form method="GET" class="flex flex-wrap flex-col gap-4 items-start">
+                    <p class="text-md text-gray-700 font-bold">Filtrer par activité :</p>
                     <div class="flex items-center gap-2">
                         <select name="activity" class="rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500">
+
                             <option value="">Toutes les activités</option>
                             {% for activity in activities %}
                             <option value="{{ activity.name }}" {% if activity.name == selected_activity %}selected{% endif %}>
@@ -234,18 +236,60 @@
                             </option>
                             {% endfor %}    
                         </select>
+                        <div class="flex items-center gap-2">
+                            <input type="checkbox" id="exclude_ubiquitous" name="exclude_ubiquitous" value="true" {% if exclude_ubiquitous %}checked{% endif %} class="rounded border-gray-300 text-green-600 focus:ring-green-500">
+                            <label for="exclude_ubiquitous" class="text-sm text-gray-700">Exclure les métabolites ubiquitaires</label>
+                        </div>
                     </div>
                     
-                    <div class="flex items-center gap-2">
-                        <input type="checkbox" id="exclude_ubiquitous" name="exclude_ubiquitous" value="true" {% if exclude_ubiquitous %}checked{% endif %} class="rounded border-gray-300 text-green-600 focus:ring-green-500">
-                        <label for="exclude_ubiquitous" class="text-sm text-gray-700">Exclure les métabolites ubiquitaires</label>
+
+                    <p class="text-md text-gray-700 font-bold mt-4">Contient le(s) métabolite(s) :</p>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="relative">
+                            <input type="text" 
+                                   id="search1" 
+                                   class="form-input w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500" 
+                                   placeholder="Rechercher un métabolite...">
+                            <select name="metabolite_filter_1" id="metabolite_filter_1" class="form-select w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500">
+                                <option value="">Tous les métabolites</option>
+                            </select>
+                        </div>
+
+                        <div class="relative">
+                            <input type="text" 
+                                   id="search2" 
+                                   class="form-input w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500" 
+                                   placeholder="Rechercher un métabolite...">
+                            <select name="metabolite_filter_2" id="metabolite_filter_2" class="form-select w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500">
+                                <option value="">Tous les métabolites</option>
+                            </select>
+                        </div>
+
+                        <div class="relative">
+                            <input type="text" 
+                                   id="search3" 
+                                   class="form-input w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500" 
+                                   placeholder="Rechercher un métabolite...">
+                            <select name="metabolite_filter_3" id="metabolite_filter_3" class="form-select w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500">
+                                <option value="">Tous les métabolites</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <p class="text-md text-gray-700 font-bold mt-4">Filtrer par nom de plante :</p>
+                    <div class="flex items-center gap-2 max-w-[600px] w-full">
+                        <input type="text" name="search_text" value="{{ search_text }}" placeholder="Rechercher une plante..." class="rounded-md flex-grow border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500">
+                        <select name="search_type" class="rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500">
+                            <option value="contains" {% if search_type == 'contains' %}selected{% endif %}>Contient</option>
+                            <option value="starts_with" {% if search_type == 'starts_with' %}selected{% endif %}>Commence par</option>
+                        </select>
                     </div>
                     
                     <div>
                         <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors">
                             Filtrer
                         </button>
-                        {% if activity_filter or exclude_ubiquitous %}
+                        {% if activity_filter or exclude_ubiquitous or search_text %}
                         <a href="{% url 'plant_detail' plant.id %}" class="ml-2 text-gray-600 hover:text-gray-800">
                             Réinitialiser
                         </a>
@@ -328,32 +372,52 @@
                                 </select>
                             </div>
                         </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <div class="flex flex-col gap-1">
+                                <span>Concentration</span>
+                                <select id="sort-concentration" class="sort-select text-xs" data-field="total_concentration" onchange="updateCommonSort(this)">
+                                    <option value="">Trier par</option>
+                                    <option value="asc">Plus petit</option>
+                                    <option value="desc">Plus grand</option>
+                                </select>
+                            </div>
+                        </th>
                         {% endif %}
                     </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
                     {% for common_plant in common_plants.results %}
-                    <tr class="hover:bg-gray-50 cursor-pointer" onclick="window.location='{% url 'plant_detail' common_plant.id %}';">
-                        <td class="px-6 py-4 text-wrap text-sm font-medium text-gray-900">
-                            <span class="text-gray-600 text-xs font-light">{{ forloop.counter|add:common_start }}.</span> 
-                            <span class="text-green-700">{{ common_plant.name }}</span>
+                    <tr class="hover:bg-gray-50 cursor-pointer" onclick="window.location='{% url 'plant_detail' common_plant.id %}'">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center">
+                                <div class="ml-0">
+                                    <div class="text-sm font-medium text-gray-900">
+                                        <a href="{% url 'plant_detail' common_plant.id %}" class="hover:text-green-800 hover:underline transition-colors duration-300">
+                                            {{ common_plant.name }}
+                                        </a>
+                                    </div>
+                                    <div class="text-sm text-gray-500">
+                                        {{ common_plant.french_name }}
+                                    </div>
+                                </div>
+                            </div>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             {{ common_plant.common_metabolites_count }}
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm">
-                            <span class="{% if common_plant.percentage_type == 'blue' %}pill-blue{% else %}pill-green{% endif %}">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {{ common_plant.percentage_type }}-percentage">
                                 {{ common_plant.common_metabolites_percentage }}%
                             </span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm">
-                            <span class="concentration-badge concentration-medium pill-purple">
-                                {{ common_plant.meta_percentage_score|floatformat:2 }}
+                            <span class="pill-purple">
+                                {{ common_plant.meta_percentage_score }}
                             </span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm">
-                            <span class="concentration-badge concentration-medium pill-pink">
-                                {{ common_plant.meta_root_score|floatformat:2 }}
+                            <span class="pill-pink">
+                                {{ common_plant.meta_root_score }}
                             </span>
                         </td>
                         {% if activity_filter %}
@@ -362,6 +426,11 @@
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             {{ common_plant.total_activity_metabolites_count }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            <span class="pill-blue">
+                                {{ common_plant.total_concentration|floatformat:2 }}
+                            </span>
                         </td>
                         {% endif %}
                     </tr>
@@ -510,6 +579,10 @@
             window.location.href = newUrl;
         }
 
+        function resetMetaboliteFilter(index) {
+            document.getElementById(`metabolite_filter_${index}`).value = '';
+        }
+
         // Initialiser les sélecteurs de tri avec les valeurs actuelles
         document.addEventListener('DOMContentLoaded', function() {
             const urlParams = new URLSearchParams(window.location.search);
@@ -575,6 +648,107 @@
                 }
             }
         });
+
+        // Fonction pour charger les métabolites
+        async function loadMetabolites(searchTerm, selectId) {
+            try {
+                const response = await fetch(`{% url 'search_metabolites' %}?q=${encodeURIComponent(searchTerm)}`);
+                const data = await response.json();
+                
+                const select = document.getElementById(selectId);
+                select.innerHTML = '<option value="">Tous les métabolites</option>';
+                
+                data.forEach(metabolite => {
+                    const option = document.createElement('option');
+                    option.value = metabolite.id;
+                    option.textContent = metabolite.name;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Erreur lors du chargement des métabolites:', error);
+            }
+        }
+
+        // Gérer la recherche pour chaque select
+        for (let i = 1; i <= 3; i++) {
+            const searchInput = document.getElementById(`search${i}`);
+            const select = document.getElementById(`metabolite_filter_${i}`);
+            let timeoutId;
+
+            // Fonction pour mettre à jour le select
+            function updateSelect(value) {
+                clearTimeout(timeoutId);
+                timeoutId = setTimeout(() => {
+                    loadMetabolites(value, `metabolite_filter_${i}`);
+                }, 300);
+            }
+
+            // Écouter les changements de valeur (saisie manuelle)
+            searchInput.addEventListener('input', function() {
+                updateSelect(this.value);
+            });
+
+            // Écouter les changements programmatiques
+            const observer = new MutationObserver(function(mutations) {
+                mutations.forEach(function(mutation) {
+                    if (mutation.type === 'attributes' && mutation.attributeName === 'value') {
+                        updateSelect(searchInput.value);
+                    }
+                });
+            });
+
+            observer.observe(searchInput, {
+                attributes: true,
+                attributeFilter: ['value']
+            });
+
+            // Charger les métabolites initiaux et pré-sélectionner la valeur
+            const selectedValue = select.value;
+            if (selectedValue) {
+                // Charger tous les métabolites
+                loadMetabolites('', `metabolite_filter_${i}`).then(() => {
+                    // Sélectionner la valeur
+                    select.value = selectedValue;
+                    // Trouver le nom du métabolite sélectionné
+                    const selectedOption = select.options[select.selectedIndex];
+                    if (selectedOption) {
+                        // Pré-remplir le champ de recherche
+                        searchInput.value = selectedOption.text;
+                        // Mettre à jour le select avec le nom
+                        updateSelect(selectedOption.text);
+                    }
+                });
+            }
+        }
+
+        // Pré-remplir les champs avec les valeurs de l'URL
+        const urlParams = new URLSearchParams(window.location.search);
+        for (let i = 1; i <= 3; i++) {
+            const metaboliteId = urlParams.get(`metabolite_filter_${i}`);
+            if (metaboliteId) {
+                const select = document.getElementById(`metabolite_filter_${i}`);
+                const searchInput = document.getElementById(`search${i}`);
+                
+                // D'abord, charger le métabolite spécifique
+                fetch(`{% url 'search_metabolites' %}?id=${metaboliteId}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.length > 0) {
+                            const metabolite = data[0];
+                            // Mettre le nom dans le champ de recherche
+                            searchInput.value = metabolite.name;
+                            // Mettre à jour le select avec le nom
+                            loadMetabolites(metabolite.name, `metabolite_filter_${i}`).then(() => {
+                                // Une fois les métabolites chargés, sélectionner le bon
+                                select.value = metaboliteId;
+                            });
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Erreur lors du chargement du métabolite:', error);
+                    });
+            }
+        }
     </script>
 
     <style>

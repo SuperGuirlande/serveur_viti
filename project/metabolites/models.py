@@ -335,7 +335,7 @@ class Plant(models.Model):
             logger.debug("Cache hit - Utilisation des données en cache")
         return result
 
-    def get_common_plants(self, activity_filter=None, page=1, per_page=50, sort_params=None, exclude_ubiquitous=False):
+    def get_common_plants(self, activity_filter=None, page=1, per_page=50, sort_params=None, exclude_ubiquitous=False, search_text='', search_type='contains', metabolite_filters=None):
         """Version optimisée avec matérialisation des CTE et index"""
         logger.info(f"Début get_common_plants pour la plante {self.name}")
         offset = (page - 1) * per_page
@@ -359,6 +359,8 @@ class Plant(models.Model):
                     order_by.append(f"common_activity_metabolites_count {direction}")
                 elif field == 'total_activity_metabolites' and activity_filter:
                     order_by.append(f"total_activity_metabolites_count {direction}")
+                elif field == 'total_concentration' and activity_filter:
+                    order_by.append(f"total_concentration {direction}")
         
         # Ordre par défaut si aucun tri n'est spécifié
         if not order_by:
@@ -401,91 +403,106 @@ class Plant(models.Model):
                 
                 cursor.execute(query_temp_ref, [self.name])
 
-                query_temp_activity = """
-                    CREATE TEMPORARY TABLE IF NOT EXISTS temp_activity_metabolites AS
-                    SELECT DISTINCT mp.metabolite_id, mp.plant_name
-                    FROM metabolites_metaboliteplant mp
-                    JOIN metabolites_metaboliteactivity ma ON ma.metabolite_id = mp.metabolite_id
-                    JOIN metabolites_activity a ON a.id = ma.activity_id
-                    JOIN metabolites_metabolite m ON m.id = mp.metabolite_id
-                    WHERE a.name = %s
-                """
-                
-                if exclude_ubiquitous:
-                    query_temp_activity += " AND m.is_ubiquitous = FALSE"
-                
-                cursor.execute(query_temp_activity, [activity_filter])
+                # Ajouter les filtres de métabolites si présents
+                if metabolite_filters and any(metabolite_filters):
+                    for i, metabolite_id in enumerate(metabolite_filters):
+                        if metabolite_id:
+                            query_temp_ref = f"""
+                                CREATE TEMPORARY TABLE IF NOT EXISTS temp_filtered_plants_{i} AS
+                                SELECT DISTINCT plant_name
+                                FROM metabolites_metaboliteplant
+                                WHERE metabolite_id = %s
+                            """
+                            cursor.execute(query_temp_ref, [metabolite_id])
 
-                # Requête principale avec tri dynamique
-                query_main = f"""
+                # Récupérer l'ID de l'activité
+                query_activity_id = """
+                    SELECT id FROM metabolites_activity WHERE name = %s
+                """
+                cursor.execute(query_activity_id, [activity_filter])
+                activity_id = cursor.fetchone()[0]
+
+                # Requête principale avec calcul direct
+                query = f"""
                     WITH plant_counts AS (
-                        SELECT plant_name, COUNT(DISTINCT mp.metabolite_id) as metabolites_total
-                        FROM metabolites_metaboliteplant mp
+                        SELECT 
+                            p.name,
+                            COUNT(DISTINCT mp.metabolite_id) as metabolites_total
+                        FROM metabolites_plant p
+                        JOIN metabolites_metaboliteplant mp ON mp.plant_name = p.name
                         JOIN metabolites_metabolite m ON m.id = mp.metabolite_id
                         WHERE 1=1
                 """
                 
                 if exclude_ubiquitous:
-                    query_main += " AND m.is_ubiquitous = FALSE"
+                    query += " AND m.is_ubiquitous = FALSE"
                 
-                query_main += f"""
-                        GROUP BY plant_name
+                query += f"""
+                        GROUP BY p.name
                     )
                     SELECT 
                         p.id,
                         p.name,
-                        COUNT(DISTINCT mp2.metabolite_id) as common_metabolites_count,
-                        COUNT(DISTINCT CASE 
-                            WHEN am.metabolite_id IS NOT NULL 
-                            THEN mp2.metabolite_id 
-                        END) as common_activity_metabolites_count,
+                        p.french_name,
+                        COUNT(DISTINCT CASE WHEN rm.metabolite_id IS NOT NULL THEN mp.metabolite_id END) as common_metabolites_count,
+                        COUNT(DISTINCT CASE WHEN ma.activity_id = {activity_id} THEN mp.metabolite_id END) as total_activity_metabolites_count,
+                        COUNT(DISTINCT CASE WHEN rm.metabolite_id IS NOT NULL AND ma.activity_id = {activity_id} THEN mp.metabolite_id END) as common_activity_metabolites_count,
+                        COALESCE(SUM(CASE 
+                            WHEN ma.activity_id = {activity_id} 
+                            THEN COALESCE(mp.high, mp.low, 0) 
+                        END), 0) as total_concentration,
                         pc.metabolites_total,
-                        t2.activity_count as total_activity_metabolites_count,
                         COUNT(*) OVER() as pagination_total,
-                        """ + str(reference_count) + """ as reference_count
+                        {reference_count} as reference_count
                     FROM metabolites_plant p
-                    JOIN metabolites_metaboliteplant mp2 ON mp2.plant_name = p.name
-                    JOIN temp_reference_metabolites rm ON rm.metabolite_id = mp2.metabolite_id
-                    JOIN plant_counts pc ON pc.plant_name = p.name
-                    LEFT JOIN temp_activity_metabolites am ON am.metabolite_id = mp2.metabolite_id 
-                        AND am.plant_name = p.name
-                    LEFT JOIN (
-                        SELECT mp.plant_name, COUNT(DISTINCT ma.metabolite_id) as activity_count
-                        FROM metabolites_metaboliteplant mp
-                        JOIN metabolites_metaboliteactivity ma ON ma.metabolite_id = mp.metabolite_id
-                        JOIN metabolites_activity a ON a.id = ma.activity_id
-                """
-                
-                if exclude_ubiquitous:
-                    query_main += """
-                        JOIN metabolites_metabolite m ON m.id = mp.metabolite_id
-                        WHERE a.name = %s AND m.is_ubiquitous = FALSE
-                    """
-                else:
-                    query_main += """
-                        WHERE a.name = %s
-                    """
-                
-                query_main += """
-                        GROUP BY mp.plant_name
-                    ) t2 ON t2.plant_name = p.name
+                    JOIN metabolites_metaboliteplant mp ON mp.plant_name = p.name
+                    LEFT JOIN temp_reference_metabolites rm ON rm.metabolite_id = mp.metabolite_id
+                    LEFT JOIN metabolites_metaboliteactivity ma ON ma.metabolite_id = mp.metabolite_id
+                    JOIN plant_counts pc ON pc.name = p.name
                     WHERE p.name != %s AND pc.metabolites_total > 1
-                    GROUP BY p.id, p.name, pc.metabolites_total, t2.activity_count
-                    HAVING COUNT(DISTINCT mp2.metabolite_id) > 0
                 """
                 
-                query_main += f" {order_by_clause}"
-                query_main += " LIMIT %s OFFSET %s"
-                
-                cursor.execute(query_main, [activity_filter, self.name, per_page, offset])
+                params = [self.name]
 
-                columns = [col[0] for col in cursor.description]
-                results = [dict(zip(columns, row)) for row in cursor.fetchall()]
-                logger.info(f"Nombre de résultats obtenus: {len(results)}")
+                # Ajouter les jointures avec les tables de filtres de métabolites si présents
+                if metabolite_filters and any(metabolite_filters):
+                    for i, metabolite_id in enumerate(metabolite_filters):
+                        if metabolite_id:
+                            query += f" AND p.name IN (SELECT plant_name FROM temp_filtered_plants_{i})"
+
+                # Ajouter la condition de recherche
+                if search_text:
+                    if search_type == 'contains':
+                        query += " AND LOWER(p.name) LIKE LOWER(%s)"
+                        params.append(f"%{search_text}%")
+                    else:  # starts_with
+                        query += " AND LOWER(p.name) LIKE LOWER(%s)"
+                        params.append(f"{search_text}%")
+                
+                query += " GROUP BY p.id, p.name, p.french_name, pc.metabolites_total"
+                query += " HAVING COUNT(DISTINCT CASE WHEN rm.metabolite_id IS NOT NULL THEN mp.metabolite_id END) > 0"
+                query += f" {order_by_clause}"
+                query += " LIMIT %s OFFSET %s"
+                
+                params.extend([per_page, offset])
+                
+                try:
+                    cursor.execute(query, params)
+                    columns = [col[0] for col in cursor.description]
+                    results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+                    logger.info(f"Nombre de résultats obtenus: {len(results)}")
+                except Exception as e:
+                    logger.error(f"Erreur SQL: {e}")
+                    logger.error(f"Requête: {query}")
+                    logger.error(f"Paramètres: {params}")
+                    results = []
 
                 # Nettoyer les tables temporaires
                 cursor.execute("DROP TEMPORARY TABLE IF EXISTS temp_reference_metabolites")
                 cursor.execute("DROP TEMPORARY TABLE IF EXISTS temp_activity_metabolites")
+                if metabolite_filters and any(metabolite_filters):
+                    for i in range(len(metabolite_filters)):
+                        cursor.execute(f"DROP TEMPORARY TABLE IF EXISTS temp_filtered_plants_{i}")
 
             else:
                 # Version sans activité avec tri dynamique
@@ -501,6 +518,18 @@ class Plant(models.Model):
                     query_temp_ref += " AND m.is_ubiquitous = FALSE"
                 
                 cursor.execute(query_temp_ref, [self.name])
+
+                # Ajouter les filtres de métabolites si présents
+                if metabolite_filters and any(metabolite_filters):
+                    for i, metabolite_id in enumerate(metabolite_filters):
+                        if metabolite_id:
+                            query_temp_ref = f"""
+                                CREATE TEMPORARY TABLE IF NOT EXISTS temp_filtered_plants_{i} AS
+                                SELECT DISTINCT plant_name
+                                FROM metabolites_metaboliteplant
+                                WHERE metabolite_id = %s
+                            """
+                            cursor.execute(query_temp_ref, [metabolite_id])
 
                 query = f"""
                     WITH plant_counts AS (
@@ -519,29 +548,55 @@ class Plant(models.Model):
                     SELECT 
                         p.id,
                         p.name,
+                        p.french_name,
                         COUNT(DISTINCT mp2.metabolite_id) as common_metabolites_count,
                         pc.metabolites_total,
                         COUNT(*) OVER() as pagination_total,
-                        """ + str(reference_count) + """ as reference_count
+                        {reference_count} as reference_count
                     FROM metabolites_plant p
                     JOIN metabolites_metaboliteplant mp2 ON mp2.plant_name = p.name
                     JOIN temp_reference_metabolites rm ON rm.metabolite_id = mp2.metabolite_id
                     JOIN plant_counts pc ON pc.plant_name = p.name
                     WHERE p.name != %s AND pc.metabolites_total > 1
-                    GROUP BY p.id, p.name, pc.metabolites_total
-                    HAVING COUNT(DISTINCT mp2.metabolite_id) > 0
                 """
-                
-                query += f" {order_by_clause}"
-                query += " LIMIT %s OFFSET %s"
-                logger.info(f"Exécution de la requête SQL: {query}")
-                cursor.execute(query, [self.name, per_page, offset])
+
+                # Ajouter les jointures avec les tables de filtres de métabolites si présents
+                if metabolite_filters and any(metabolite_filters):
+                    for i, metabolite_id in enumerate(metabolite_filters):
+                        if metabolite_id:
+                            query += f" AND p.name IN (SELECT plant_name FROM temp_filtered_plants_{i})"
+
+                # Ajouter la condition de recherche
+                if search_text:
+                    if search_type == 'contains':
+                        query += " AND LOWER(p.name) LIKE LOWER(%s)"
+                        search_param = f"%{search_text}%"
+                    else:  # starts_with
+                        query += " AND LOWER(p.name) LIKE LOWER(%s)"
+                        search_param = f"{search_text}%"
+                    
+                    query += " GROUP BY p.id, p.name, p.french_name, pc.metabolites_total"
+                    query += " HAVING COUNT(DISTINCT mp2.metabolite_id) > 0"
+                    query += f" {order_by_clause}"
+                    query += " LIMIT %s OFFSET %s"
+                    
+                    cursor.execute(query, [self.name, search_param, per_page, offset])
+                else:
+                    query += " GROUP BY p.id, p.name, p.french_name, pc.metabolites_total"
+                    query += " HAVING COUNT(DISTINCT mp2.metabolite_id) > 0"
+                    query += f" {order_by_clause}"
+                    query += " LIMIT %s OFFSET %s"
+                    
+                    cursor.execute(query, [self.name, per_page, offset])
 
                 columns = [col[0] for col in cursor.description]
                 results = [dict(zip(columns, row)) for row in cursor.fetchall()]
                 logger.info(f"Nombre de résultats obtenus: {len(results)}")
 
                 cursor.execute("DROP TEMPORARY TABLE IF EXISTS temp_reference_metabolites")
+                if metabolite_filters and any(metabolite_filters):
+                    for i in range(len(metabolite_filters)):
+                        cursor.execute(f"DROP TEMPORARY TABLE IF EXISTS temp_filtered_plants_{i}")
             
             # Calculer les pourcentages avec la nouvelle méthode
             for result in results:
@@ -584,7 +639,7 @@ class Plant(models.Model):
                 'per_page': per_page,
                 'total_pages': (total_count + per_page - 1) // per_page
             }
-    
+
     def get_metabolites_by_activity(self, activity_name):
         """Optimisation avec index et SQL brut"""
         with connection.cursor() as cursor:
@@ -631,6 +686,7 @@ class MetaboliteActivity(models.Model):
         unique_together = ['metabolite', 'activity', 'dosage', 'reference']
         indexes = [
             models.Index(fields=['metabolite_id', 'activity_id']),
+            models.Index(fields=['activity_id']),
         ]
 
     def __str__(self):
@@ -651,13 +707,10 @@ class MetabolitePlant(models.Model):
 
     class Meta:
         indexes = [
+            models.Index(fields=['plant_name', 'metabolite_id']),
             models.Index(fields=['metabolite_id', 'plant_name']),
-            models.Index(fields=['plant_name', 'metabolite', 'plant_part'], name='idx_plant_metab_part'),
-            models.Index(fields=['metabolite', 'plant_name'], name='idx_metab_plant'),
-            models.Index(fields=['metabolite'], name='idx_metabolite'),
-            models.Index(fields=['plant_name', 'plant_part'], name='idx_plant_part'),
-            models.Index(fields=['plant_name', 'metabolite_id'], name='idx_plant_metab_id'),
-            models.Index(fields=['metabolite_id', 'plant_name'], name='idx_metab_id_plant'),
+            models.Index(fields=['plant_name']),
+            models.Index(fields=['metabolite_id']),
         ]
         unique_together = ['metabolite', 'plant_name', 'plant_part', 'low', 'high', 'reference']
     
