@@ -175,147 +175,181 @@ def select_plants_for_remede(request, remede_id):
     if plants_by_activity is None:
         logger.debug("Cache miss - Exécution des requêtes SQL")
         with connection.cursor() as cursor:
-            query = """
-            WITH target_metabolites AS (
+            # Nettoyer les tables temporaires potentiellement existantes
+            cursor.execute("DROP TEMPORARY TABLE IF EXISTS temp_target_metabolites")
+            cursor.execute("DROP TEMPORARY TABLE IF EXISTS temp_selected_metabolites")
+            
+            # Créer des tables temporaires pour améliorer les performances
+            # 1. Métabolites de la plante cible
+            cursor.execute("""
+                CREATE TEMPORARY TABLE temp_target_metabolites AS
                 SELECT DISTINCT mp.metabolite_id
                 FROM metabolites_metaboliteplant mp
                 JOIN metabolites_metabolite m ON m.id = mp.metabolite_id
                 WHERE mp.plant_name = %s
                 AND (%s = FALSE OR m.is_ubiquitous = FALSE)
-            ),
-            selected_metabolites AS (
-                SELECT DISTINCT id as metabolite_id
-                FROM metabolites_metabolite
-                WHERE id IN %s
-            ),
-            plant_metabolites AS (
-                SELECT 
-                    p.id,
-                    p.name,
-                    p.french_name,
-                    COUNT(DISTINCT mp.metabolite_id) as total_metabolites_count,
-                    COUNT(DISTINCT CASE WHEN tm.metabolite_id IS NOT NULL THEN mp.metabolite_id END) as common_metabolites_count,
-                    COUNT(DISTINCT CASE WHEN ma.activity_id = %s THEN mp.metabolite_id END) as activity_metabolites_count,
-                    COUNT(DISTINCT CASE WHEN tm.metabolite_id IS NOT NULL AND ma.activity_id = %s THEN mp.metabolite_id END) as common_activity_metabolites_count,
-                    COALESCE(SUM(CASE 
-                        WHEN ma.activity_id = %s 
-                        THEN COALESCE(mp.high, mp.low, 0) 
-                    END), 0) as total_concentration,
-                    GROUP_CONCAT(
-                        CASE WHEN tm.metabolite_id IS NOT NULL AND ma.activity_id = %s 
-                        THEN m.name 
-                        END
-                        ORDER BY m.name
-                        SEPARATOR ','
-                    ) as common_metabolites_names,
-                    GROUP_CONCAT(
-                        CASE WHEN ma.activity_id = %s AND tm.metabolite_id IS NULL 
-                        THEN m.name 
-                        END
-                        ORDER BY m.name
-                        SEPARATOR ','
-                    ) as complementary_metabolites_names,
-                    ROUND(
-                        COUNT(DISTINCT CASE WHEN tm.metabolite_id IS NOT NULL THEN mp.metabolite_id END) * 100.0 / 
-                        NULLIF(COUNT(DISTINCT mp.metabolite_id), 0),
-                        1
-                    ) as common_percentage,
-                    ROUND(
-                        COUNT(DISTINCT CASE WHEN tm.metabolite_id IS NOT NULL THEN mp.metabolite_id END) * 
-                        (COUNT(DISTINCT CASE WHEN tm.metabolite_id IS NOT NULL THEN mp.metabolite_id END) * 100.0 / 
-                        NULLIF(COUNT(DISTINCT mp.metabolite_id), 0)) / 100,
-                        2
-                    ) as meta_percentage_score,
-                    ROUND(
-                        SQRT(COUNT(DISTINCT CASE WHEN tm.metabolite_id IS NOT NULL THEN mp.metabolite_id END)) * 
-                        (COUNT(DISTINCT CASE WHEN tm.metabolite_id IS NOT NULL THEN mp.metabolite_id END) * 100.0 / 
-                        NULLIF(COUNT(DISTINCT mp.metabolite_id), 0)) / 100,
-                        2
-                    ) as meta_root_score
-                FROM metabolites_plant p
-                JOIN metabolites_metaboliteplant mp ON mp.plant_name = p.name
-                JOIN metabolites_metabolite m ON m.id = mp.metabolite_id
-                LEFT JOIN target_metabolites tm ON tm.metabolite_id = mp.metabolite_id
-                LEFT JOIN metabolites_metaboliteactivity ma ON ma.metabolite_id = mp.metabolite_id
-                WHERE p.name != %s
-                AND (
-                    NOT EXISTS (SELECT 1 FROM selected_metabolites)
-                    OR NOT EXISTS (
-                        SELECT 1 
-                        FROM selected_metabolites sm 
-                        WHERE NOT EXISTS (
-                            SELECT 1 
-                            FROM metabolites_metaboliteplant mp2 
-                            WHERE mp2.plant_name = p.name 
-                            AND mp2.metabolite_id = sm.metabolite_id
-                        )
-                    )
-                )
-                GROUP BY p.id, p.name, p.french_name
-            )
-            SELECT *
-            FROM plant_metabolites
-            ORDER BY 
+            """, [remede.target_plant.name, exclude_ubiquitous])
+            cursor.execute("CREATE INDEX idx_temp_target_metabolites ON temp_target_metabolites(metabolite_id)")
+            
+            # 2. Métabolites sélectionnés pour le filtrage
+            if selected_metabolites:
+                placeholders = ', '.join(['%s'] * len(selected_metabolites))
+                cursor.execute(f"""
+                    CREATE TEMPORARY TABLE temp_selected_metabolites AS
+                    SELECT DISTINCT id as metabolite_id
+                    FROM metabolites_metabolite
+                    WHERE id IN ({placeholders})
+                """, [m.id for m in selected_metabolites])
+                cursor.execute("CREATE INDEX idx_temp_selected_metabolites ON temp_selected_metabolites(metabolite_id)")
+            
+            # Parties de requête communes pour chaque activité
+            base_query = """
+                WITH plant_metabolites AS (
+                    SELECT 
+                        p.id,
+                        p.name,
+                        p.french_name,
+                        COUNT(DISTINCT mp.metabolite_id) as total_metabolites_count,
+                        COUNT(DISTINCT CASE WHEN ttm.metabolite_id IS NOT NULL THEN mp.metabolite_id END) as common_metabolites_count,
+                        COUNT(DISTINCT CASE WHEN ma.activity_id = %s THEN mp.metabolite_id END) as activity_metabolites_count,
+                        COUNT(DISTINCT CASE WHEN ttm.metabolite_id IS NOT NULL AND ma.activity_id = %s THEN mp.metabolite_id END) as common_activity_metabolites_count,
+                        COALESCE(SUM(CASE 
+                            WHEN ma.activity_id = %s 
+                            THEN COALESCE(mp.high, mp.low, 0) 
+                        END), 0) as total_concentration,
+                        GROUP_CONCAT(
+                            CASE WHEN ttm.metabolite_id IS NOT NULL AND ma.activity_id = %s 
+                            THEN m.name 
+                            END
+                            ORDER BY m.name
+                            SEPARATOR ','
+                        ) as common_metabolites_names,
+                        GROUP_CONCAT(
+                            CASE WHEN ma.activity_id = %s AND ttm.metabolite_id IS NULL 
+                            THEN m.name 
+                            END
+                            ORDER BY m.name
+                            SEPARATOR ','
+                        ) as complementary_metabolites_names,
+                        ROUND(
+                            COUNT(DISTINCT CASE WHEN ttm.metabolite_id IS NOT NULL THEN mp.metabolite_id END) * 100.0 / 
+                            NULLIF(COUNT(DISTINCT mp.metabolite_id), 0),
+                            1
+                        ) as common_percentage,
+                        ROUND(
+                            COUNT(DISTINCT CASE WHEN ttm.metabolite_id IS NOT NULL THEN mp.metabolite_id END) * 
+                            (COUNT(DISTINCT CASE WHEN ttm.metabolite_id IS NOT NULL THEN mp.metabolite_id END) * 100.0 / 
+                            NULLIF(COUNT(DISTINCT mp.metabolite_id), 0)) / 100,
+                            2
+                        ) as meta_percentage_score,
+                        ROUND(
+                            SQRT(COUNT(DISTINCT CASE WHEN ttm.metabolite_id IS NOT NULL THEN mp.metabolite_id END)) * 
+                            (COUNT(DISTINCT CASE WHEN ttm.metabolite_id IS NOT NULL THEN mp.metabolite_id END) * 100.0 / 
+                            NULLIF(COUNT(DISTINCT mp.metabolite_id), 0)) / 100,
+                            2
+                        ) as meta_root_score
+                    FROM metabolites_plant p
+                    JOIN metabolites_metaboliteplant mp ON mp.plant_name = p.name
+                    JOIN metabolites_metabolite m ON m.id = mp.metabolite_id
+                    LEFT JOIN temp_target_metabolites ttm ON ttm.metabolite_id = mp.metabolite_id
+                    LEFT JOIN metabolites_metaboliteactivity ma ON ma.metabolite_id = mp.metabolite_id
+                    WHERE p.name != %s
             """
             
-            # Ajouter l'ordre de tri dynamique
-            order_clauses = []
-            for field, direction in sort_params:
-                if field == 'name':
-                    order_clauses.append(f"name {direction}")
-                elif field == 'common_metabolites':
-                    order_clauses.append(f"common_metabolites_count {direction}")
-                elif field == 'common_percentage':
-                    order_clauses.append(f"common_percentage {direction}")
-                elif field == 'meta_percentage_score':
-                    order_clauses.append(f"meta_percentage_score {direction}")
-                elif field == 'meta_root_score':
-                    order_clauses.append(f"meta_root_score {direction}")
-                elif field == 'common_activity_metabolites':
-                    order_clauses.append(f"common_activity_metabolites_count {direction}")
-                elif field == 'total_activity_metabolites':
-                    order_clauses.append(f"activity_metabolites_count {direction}")
-                elif field == 'total_concentration':
-                    order_clauses.append(f"total_concentration {direction}")
+            # Ajouter la condition pour les métabolites sélectionnés
+            if selected_metabolites:
+                metabolite_condition = """
+                    AND (
+                        NOT EXISTS (SELECT 1 FROM temp_selected_metabolites)
+                        OR NOT EXISTS (
+                            SELECT 1 
+                            FROM temp_selected_metabolites tsm 
+                            WHERE NOT EXISTS (
+                                SELECT 1 
+                                FROM metabolites_metaboliteplant mp2 
+                                WHERE mp2.plant_name = p.name 
+                                AND mp2.metabolite_id = tsm.metabolite_id
+                            )
+                        )
+                    )
+                """
+                base_query += metabolite_condition
             
-            query += ", ".join(order_clauses) if order_clauses else "common_activity_metabolites_count DESC"
-            query += " LIMIT 20"
+            base_query += """
+                    GROUP BY p.id, p.name, p.french_name
+                )
+                SELECT *
+                FROM plant_metabolites
+                ORDER BY 
+            """
             
             # Exécuter la requête pour chaque activité
             plants_by_activity = {}
             for activity in remede.activities.all():
                 # Construire les paramètres pour cette activité
-                metabolite_ids = tuple(m.id for m in selected_metabolites) if selected_metabolites else (0,)
-                params = [
-                    remede.target_plant.name,
-                    exclude_ubiquitous,
-                    metabolite_ids,
+                activity_params = [
                     activity.id,  # Pour le premier COUNT CASE
                     activity.id,  # Pour le deuxième COUNT CASE
                     activity.id,  # Pour le CASE dans le SUM
                     activity.id,  # Pour le premier GROUP_CONCAT
                     activity.id,  # Pour le deuxième GROUP_CONCAT
-                    remede.target_plant.name
+                    remede.target_plant.name  # Pour la condition WHERE p.name !=
                 ]
-
-                cursor.execute(query, params)
                 
-                # Traiter les résultats
-                columns = [col[0] for col in cursor.description]
-                results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+                # Ajouter l'ordre de tri dynamique
+                order_clauses = []
+                for field, direction in sort_params:
+                    if field == 'name':
+                        order_clauses.append(f"name {direction}")
+                    elif field == 'common_metabolites':
+                        order_clauses.append(f"common_metabolites_count {direction}")
+                    elif field == 'common_percentage':
+                        order_clauses.append(f"common_percentage {direction}")
+                    elif field == 'meta_percentage_score':
+                        order_clauses.append(f"meta_percentage_score {direction}")
+                    elif field == 'meta_root_score':
+                        order_clauses.append(f"meta_root_score {direction}")
+                    elif field == 'common_activity_metabolites':
+                        order_clauses.append(f"common_activity_metabolites_count {direction}")
+                    elif field == 'total_activity_metabolites':
+                        order_clauses.append(f"activity_metabolites_count {direction}")
+                    elif field == 'total_concentration':
+                        order_clauses.append(f"total_concentration {direction}")
                 
-                # Traiter les listes de métabolites
-                for result in results:
-                    result['common_metabolites_names'] = result['common_metabolites_names'].split(',') if result['common_metabolites_names'] else []
-                    result['complementary_metabolites_names'] = result['complementary_metabolites_names'].split(',') if result['complementary_metabolites_names'] else []
+                query = base_query + (", ".join(order_clauses) if order_clauses else "common_activity_metabolites_count DESC")
+                query += " LIMIT 20"  # Augmentation à 20 pour avoir plus de plantes par activité
+                
+                try:
+                    cursor.execute(query, activity_params)
                     
-                    # Déterminer le type de pourcentage
-                    result['percentage_type'] = 'blue' if result['total_metabolites_count'] <= result['common_metabolites_count'] else 'green'
-                
-                plants_by_activity[activity.name] = results
+                    # Traiter les résultats
+                    columns = [col[0] for col in cursor.description]
+                    results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+                    
+                    # Traiter les listes de métabolites
+                    for result in results:
+                        result['common_metabolites_names'] = result['common_metabolites_names'].split(',') if result['common_metabolites_names'] else []
+                        result['complementary_metabolites_names'] = result['complementary_metabolites_names'].split(',') if result['complementary_metabolites_names'] else []
+                        
+                        # Déterminer le type de pourcentage
+                        target_metabolites_count = cursor.execute("""
+                            SELECT COUNT(*) FROM temp_target_metabolites
+                        """)
+                        target_count = cursor.fetchone()[0]
+                        result['percentage_type'] = 'blue' if target_count >= result['total_metabolites_count'] else 'green'
+                    
+                    plants_by_activity[activity.name] = results
+                    
+                except Exception as e:
+                    logger.error(f"Erreur dans la requête pour l'activité {activity.name}: {str(e)}")
+                    plants_by_activity[activity.name] = []
             
-            # Mettre en cache pour 24h
-            cache.set(cache_key, plants_by_activity, 86400)
+            # Nettoyer les tables temporaires
+            cursor.execute("DROP TEMPORARY TABLE IF EXISTS temp_target_metabolites")
+            cursor.execute("DROP TEMPORARY TABLE IF EXISTS temp_selected_metabolites")
+            
+            # Mettre en cache pour 12h
+            cache.set(cache_key, plants_by_activity, 43200)
             logger.debug("Résultats mis en cache")
     else:
         logger.debug("Cache hit - Utilisation des données en cache")
