@@ -1,0 +1,168 @@
+{% extends 'main/base.html' %}
+{% load aa_filters %}
+
+{% block title %}Profil d'acides aminés{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-2 py-8">
+    <h1 class="text-2xl font-bold mb-6">Profil d'acides aminés des plantes</h1>
+    
+    <form method="get" action="{% url 'amino_acid_profile' %}" class="mb-8">
+        <div class="mb-4">
+            <label for="plant_id" class="block text-sm font-medium text-gray-700">Sélectionner une plante</label>
+            <select name="plant_id" id="plant_id" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm rounded-md">
+                <option value="">-- Sélectionner une plante --</option>
+                {% for plant in plants %}
+                    <option value="{{ plant.id }}" {% if selected_plant.id == plant.id %}selected{% endif %}>{{ plant.name }}{% if plant.french_name %} ({{ plant.french_name }}){% endif %}</option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <div class="mb-4">
+            <label for="normalization" class="block text-sm font-medium text-gray-700">Normalisation des données</label>
+            <select name="normalization" id="normalization" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm rounded-md">
+                <option value="none" {% if normalization == 'none' %}selected{% endif %}>Aucune normalisation</option>
+                <option value="sum" {% if normalization == 'sum' %}selected{% endif %}>Somme = 1 (100%)</option>
+                <option value="zscore" {% if normalization == 'zscore' %}selected{% endif %}>Standardisation (centrer-réduire)</option>
+            </select>
+            <p class="mt-1 text-xs text-gray-500">
+                <strong>Somme = 1</strong>: Ramène les valeurs à une proportion du total (recommandé)
+                <br>
+                <strong>Standardisation</strong>: Donne un poids égal à tous les acides aminés
+            </p>
+        </div>
+        
+        <button type="submit" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">Afficher le profil</button>
+    </form>
+    
+    {% if selected_plant %}
+        <h2 class="text-xl font-semibold mb-4">Profil d'acides aminés pour {{ selected_plant.name }}{% if selected_plant.french_name %} ({{ selected_plant.french_name }}){% endif %}</h2>
+        
+        <div class="mb-4 text-sm">
+            <p class="font-medium">Méthode de normalisation : 
+                {% if normalization == 'none' %}
+                    <span class="text-blue-600">Aucune (valeurs brutes)</span>
+                {% elif normalization == 'sum' %}
+                    <span class="text-blue-600">Somme = 1 (100%)</span>
+                {% elif normalization == 'zscore' %}
+                    <span class="text-blue-600">Standardisation (centrer-réduire)</span>
+                {% endif %}
+            </p>
+            <p class="font-medium mt-1">Mesure de similarité : <span class="text-blue-600">Similarité cosinus</span></p>
+        </div>
+        
+        <!-- Légende des abréviations -->
+        <div class="mb-4 text-xs text-gray-600 grid grid-cols-4 md:grid-cols-5 lg:grid-cols-8 gap-2">
+            {% for aa in amino_acids %}
+                <div>
+                    {% with abbr=aa|slice:":3" %}
+                        <span class="font-bold">{{ abbr }}</span>: {{ aa }}
+                    {% endwith %}
+                </div>
+            {% endfor %}
+        </div>
+        
+        <!-- Tableau compact -->
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 text-xs">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th scope="col" class="px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-50 z-10">Plante</th>
+                        {% if normalization != 'none' %}
+                            <th scope="col" class="px-1 py-2 text-center text-xs font-medium text-blue-500 uppercase tracking-wider sticky left-[150px] bg-gray-50 z-10">Similarité</th>
+                        {% endif %}
+                        {% for aa in amino_acids %}
+                            <th scope="col" class="px-1 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider" title="{{ aa }}">
+                                {{ aa|slice:":3" }}
+                            </th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for data in plant_data %}
+                        <tr class="{% if data.has_missing_data %}bg-orange-100{% endif %} {% if data.is_selected %}bg-green-100{% endif %}">
+                            <td class="px-1 py-2 text-xs font-medium text-gray-900 sticky left-0 {% if data.has_missing_data %}bg-orange-100{% endif %} {% if data.is_selected %}bg-green-100{% endif %} z-10 max-w-[150px] truncate">
+                                {{ data.plant.name }}
+                                {% if data.plant.french_name %}
+                                <div class="text-gray-500 text-xs italic">{{ data.plant.french_name }}</div>
+                                {% endif %}
+                            </td>
+                            {% if normalization != 'none' %}
+                                <td class="px-1 py-2 text-center text-xs font-medium sticky left-[150px] {% if data.has_missing_data %}bg-orange-100{% endif %} {% if data.is_selected %}bg-green-100{% endif %} z-10">
+                                    {% if data.is_selected %}
+                                        <span class="font-bold">-</span>
+                                    {% else %}
+                                        <span class="font-bold {% if data.similarity > 0.7 %}text-green-600{% elif data.similarity > 0.4 %}text-yellow-600{% else %}text-red-600{% endif %}">
+                                            {{ data.similarity|floatformat:3 }}
+                                        </span>
+                                    {% endif %}
+                                </td>
+                            {% endif %}
+                            {% for aa in amino_acids %}
+                                <td class="px-1 py-2 text-center text-xs text-gray-500">
+                                    {% if normalization == 'none' %}
+                                        {% if data.concentrations|aa_get_item:aa|aa_get_item:'low' == 0 and data.concentrations|aa_get_item:aa|aa_get_item:'high' == 0 %}
+                                            <span class="text-orange-500">0</span>
+                                        {% else %}
+                                            {% with low=data.concentrations|aa_get_item:aa|aa_get_item:'low'|default:0 high=data.concentrations|aa_get_item:aa|aa_get_item:'high'|default:0 %}
+                                                {% widthratio low|add:high 2 1 as avg %}
+                                                {{ avg|floatformat:1 }}
+                                            {% endwith %}
+                                        {% endif %}
+                                    {% else %}
+                                        {% with val=data.normalized_values|aa_get_item:aa %}
+                                            {% if val == 0 %}
+                                                <span class="text-orange-500">0</span>
+                                            {% elif normalization == 'sum' %}
+                                                {{ val|floatformat:3 }}
+                                            {% else %}
+                                                {{ val|floatformat:2 }}
+                                            {% endif %}
+                                        {% endwith %}
+                                    {% endif %}
+                                </td>
+                            {% endfor %}
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <p class="mt-4 text-sm text-gray-600">
+            <span class="inline-block w-4 h-4 bg-orange-100 mr-2"></span> Les lignes en orange indiquent des plantes avec des données manquantes (traitées comme 0)
+        </p>
+        
+        <p class="mt-2 text-sm text-gray-600">
+            Note: {{ displayed_plants }} plantes affichées (sur un total de {{ total_plants }}) - Seules les plantes avec au moins une valeur d'acide aminé sont incluses (plus la plante sélectionnée).
+        </p>
+        
+        {% if normalization != 'none' %}
+        <div class="mt-4 p-4 bg-blue-50 rounded-lg">
+            <h3 class="text-md font-bold mb-2">Interprétation de la similarité cosinus :</h3>
+            <ul class="text-sm list-disc list-inside">
+                <li><span class="font-medium text-green-600">Valeur proche de 1</span> : Profils très similaires (même si les concentrations absolues diffèrent)</li>
+                <li><span class="font-medium text-yellow-600">Valeur autour de 0.5</span> : Similitude modérée</li>
+                <li><span class="font-medium text-red-600">Valeur proche de 0</span> : Profils très différents</li>
+                <li>Les plantes sont triées de la plus similaire à la moins similaire par rapport à la plante sélectionnée</li>
+            </ul>
+        </div>
+        
+        <!-- Statistiques de similarité -->
+        <div class="mt-4">
+            <h3 class="text-md font-bold mb-2">Statistiques de similarité :</h3>
+            {% with similar_plants=plant_data|aa_filter_by_similarity:0.7 %}
+                <p class="text-sm">
+                    <span class="font-medium text-green-600">{{ similar_plants|length }} plante(s)</span> présentent une forte similarité (>0.7) avec {{ selected_plant.name }}
+                </p>
+            {% endwith %}
+            
+            {% with moderately_similar=plant_data|aa_filter_by_similarity:0.4|aa_filter_by_similarity_max:0.7 %}
+                <p class="text-sm">
+                    <span class="font-medium text-yellow-600">{{ moderately_similar|length }} plante(s)</span> présentent une similarité modérée (0.4 - 0.7) avec {{ selected_plant.name }}
+                </p>
+            {% endwith %}
+        </div>
+        {% endif %}
+    {% endif %}
+</div>
+{% endblock %}

@@ -22,7 +22,7 @@ class Metabolite(models.Model):
         """Version optimisée et mise en cache"""
         return self.plants.values('plant_name').distinct().count()
     
-    def get_plants_with_parts(self, sort_field=None, sort_direction=None):
+    def get_plants_with_parts(self, sort_field=None, sort_direction=None, search_text=None, search_type=None):
         """Version optimisée avec SQL brut et tri dynamique"""
         # Définir l'ordre par défaut
         order_by = "mp.plant_name, mp.plant_part"
@@ -47,6 +47,18 @@ class Metabolite(models.Model):
             elif sort_field == "reference":
                 order_by = f"mp.reference {direction}, mp.plant_name"
 
+        # Construire la clause WHERE pour la recherche
+        where_clause = "WHERE mp.metabolite_id = %s"
+        params = [self.id]
+        
+        if search_text:
+            if search_type == 'contains':
+                where_clause += " AND mp.plant_name LIKE %s"
+                params.append(f"%{search_text}%")
+            elif search_type == 'starts_with':
+                where_clause += " AND mp.plant_name LIKE %s"
+                params.append(f"{search_text}%")
+
         with connection.cursor() as cursor:
             cursor.execute(f"""
                 SELECT 
@@ -56,12 +68,13 @@ class Metabolite(models.Model):
                     mp.high,
                     mp.deviation,
                     mp.reference,
-                    p.id as plant_id
+                    p.id as plant_id,
+                    p.french_name
                 FROM metabolites_metaboliteplant mp
                 JOIN metabolites_plant p ON p.name = mp.plant_name
-                WHERE mp.metabolite_id = %s
+                {where_clause}
                 ORDER BY {order_by}
-            """, [self.id])
+            """, params)
             
             columns = [col[0] for col in cursor.description]
             return [dict(zip(columns, row)) for row in cursor.fetchall()]
@@ -154,15 +167,19 @@ class Activity(models.Model):
     def __str__(self):
         return self.name
     
-    def get_plants_by_total_concentration(self, page=1, per_page=50, sort_params=None, search=''):
+    def get_plants_by_total_concentration(self, page=1, per_page=50, sort_params=None, search='', search_type='contains'):
         with connection.cursor() as cursor:
             # Construction de la clause WHERE pour la recherche
             where_clause = "WHERE ma.activity_id = %s"
             params = [self.id]
             
             if search:
-                where_clause += " AND p.name LIKE %s"
-                params.append(f"%{search}%")
+                if search_type == 'contains':
+                    where_clause += " AND p.name LIKE %s"
+                    params.append(f"%{search}%")
+                elif search_type == 'starts_with':
+                    where_clause += " AND p.name LIKE %s"
+                    params.append(f"{search}%")
 
             # Construction de la clause ORDER BY
             order_by = ""
@@ -199,6 +216,7 @@ class Activity(models.Model):
                     SELECT 
                         p.id,
                         p.name,
+                        p.french_name,
                         COUNT(DISTINCT mp.metabolite_id) as metabolites_count,
                         COALESCE(SUM(
                             CASE 
@@ -227,11 +245,12 @@ class Activity(models.Model):
                         JOIN metabolites_metabolite m ON m.id = mp.metabolite_id
                         JOIN metabolites_metaboliteactivity ma ON ma.metabolite_id = m.id
                     {where_clause}
-                    GROUP BY p.id, p.name
+                    GROUP BY p.id, p.name, p.french_name
                 )
                 SELECT 
                     id,
                     name,
+                    french_name,
                     metabolites_count,
                     total_concentration,
                     metabolites_details
@@ -252,15 +271,16 @@ class Activity(models.Model):
                 result = {
                     'id': row[0],
                     'name': row[1],
-                    'metabolites_count': row[2],
-                    'total_concentration': float(row[3]) if row[3] is not None else 0.0,
-                    'has_unknown_concentration': row[3] is None or row[3] == 0
+                    'french_name': row[2],
+                    'metabolites_count': row[3],
+                    'total_concentration': float(row[4]) if row[4] is not None else 0.0,
+                    'has_unknown_concentration': row[4] is None or row[4] == 0
                 }
                 
                 # Traitement des détails des métabolites
-                if row[4]:  # metabolites_details
+                if row[5]:  # metabolites_details
                     metabolites = {}
-                    for detail in row[4].split('|'):
+                    for detail in row[5].split('|'):
                         try:
                             parts = detail.split(':')
                             if len(parts) == 3:

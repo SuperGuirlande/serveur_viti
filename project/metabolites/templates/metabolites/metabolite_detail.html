@@ -110,6 +110,42 @@
             </span>
             Plantes
         </h2>
+        
+        <!-- Filtre de recherche par nom de plante -->
+        <div class="mb-6">
+            <form method="GET" action="" class="flex flex-wrap items-end gap-4">
+                <!-- Préserver les autres paramètres d'URL -->
+                {% if request.GET.sort %}<input type="hidden" name="sort" value="{{ request.GET.sort }}">{% endif %}
+                {% if request.GET.direction %}<input type="hidden" name="direction" value="{{ request.GET.direction }}">{% endif %}
+                
+                <div class="flex flex-col">
+                    <label for="search_text" class="block text-sm font-medium text-gray-700 mb-1">Filtrer par nom de plante</label>
+                    <input type="text" name="search_text" id="search_text" value="{{ search_text|default:'' }}" 
+                           placeholder="Rechercher une plante..." 
+                           class="rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 min-w-[300px]">
+                </div>
+                
+                <div class="flex flex-col">
+                    <label for="search_type" class="block text-sm font-medium text-gray-700 mb-1">Type de recherche</label>
+                    <select name="search_type" id="search_type" class="rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500">
+                        <option value="contains" {% if search_type == 'contains' %}selected{% endif %}>Contient</option>
+                        <option value="starts_with" {% if search_type == 'starts_with' %}selected{% endif %}>Commence par</option>
+                    </select>
+                </div>
+                
+                <div class="flex gap-2">
+                    <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors">
+                        Filtrer
+                    </button>
+                    {% if search_text %}
+                    <a href="{% url 'metabolite_detail' metabolite.id %}" class="inline-flex items-center px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors">
+                        Réinitialiser
+                    </a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+        
         <div class="overflow-x-auto">
             <table id="plants-table" class="min-w-full table-auto">
                 <thead class="bg-gray-50">
@@ -183,6 +219,9 @@
                             <a href="{% url 'plant_detail' plant.plant_id %}">
                                 <span class="text-gray-600 text-xs font-light">{{ forloop.counter|add:plants_start_number }}.</span> 
                                 <span class="text-green-600">{{ plant.plant_name }}</span>
+                                {% if plant.french_name %}
+                                <div class="text-gray-500 text-xs italic">{{ plant.french_name }}</div>
+                                {% endif %}
                             </a>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ plant.plant_part }}</td>
@@ -206,10 +245,10 @@
         <div class="mt-6 flex justify-center">
             <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
                 {% if plants.has_previous %}
-                    <a href="?plants_page=1{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.direction %}&direction={{ request.GET.direction }}{% endif %}" class="relative inline-flex items-center px-4 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                    <a href="?plants_page=1{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.direction %}&direction={{ request.GET.direction }}{% endif %}{% if search_text %}&search_text={{ search_text }}&search_type={{ search_type }}{% endif %}" class="relative inline-flex items-center px-4 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
                         Première
                     </a>
-                    <a href="?plants_page={{ plants.previous_page_number }}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.direction %}&direction={{ request.GET.direction }}{% endif %}" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                    <a href="?plants_page={{ plants.previous_page_number }}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.direction %}&direction={{ request.GET.direction }}{% endif %}{% if search_text %}&search_text={{ search_text }}&search_type={{ search_type }}{% endif %}" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
                         Précédente
                     </a>
                 {% endif %}
@@ -217,10 +256,10 @@
                     Page {{ plants.number }} sur {{ plants.paginator.num_pages }}
                 </span>
                 {% if plants.has_next %}
-                    <a href="?plants_page={{ plants.next_page_number }}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.direction %}&direction={{ request.GET.direction }}{% endif %}" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                    <a href="?plants_page={{ plants.next_page_number }}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.direction %}&direction={{ request.GET.direction }}{% endif %}{% if search_text %}&search_text={{ search_text }}&search_type={{ search_type }}{% endif %}" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
                         Suivante
                     </a>
-                    <a href="?plants_page={{ plants.paginator.num_pages }}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.direction %}&direction={{ request.GET.direction }}{% endif %}" class="relative inline-flex items-center px-4 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                    <a href="?plants_page={{ plants.paginator.num_pages }}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.direction %}&direction={{ request.GET.direction }}{% endif %}{% if search_text %}&search_text={{ search_text }}&search_type={{ search_type }}{% endif %}" class="relative inline-flex items-center px-4 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
                         Dernière
                     </a>
                 {% endif %}
@@ -252,6 +291,14 @@
         } else {
             urlParams.set('sort', field);
             urlParams.set('direction', direction);
+        }
+        
+        // Conserver les paramètres de recherche
+        if (urlParams.has('search_text')) {
+            const searchText = urlParams.get('search_text');
+            const searchType = urlParams.get('search_type') || 'contains';
+            urlParams.set('search_text', searchText);
+            urlParams.set('search_type', searchType);
         }
         
         // Réinitialiser la page

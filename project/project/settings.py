@@ -28,6 +28,7 @@ INSTALLED_APPS = [
     'theme',
     'metabolites',
     'remedes',
+    'acides_amines',
 ]
 
 MIDDLEWARE = [

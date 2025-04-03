@@ -10,6 +10,7 @@ urlpatterns = [
     path('', include('main.urls')),
     path('metabolites/', include('metabolites.urls')),
     path('remedes/', include('remedes.urls')),
+    path('acides-amines/', include('acides_amines.urls')),
     path("ckeditor5/", include('django_ckeditor_5.urls')),
 ]
 

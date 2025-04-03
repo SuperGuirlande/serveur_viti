@@ -23,6 +23,10 @@ def metabolite_detail(request, id):
     # Récupération des paramètres de tri
     sort_field = request.GET.get('sort')
     sort_direction = request.GET.get('direction')
+    
+    # Récupération des paramètres de recherche
+    search_text = request.GET.get('search_text', '')
+    search_type = request.GET.get('search_type', 'contains')
 
     count_per_page = 20
     paginator = Paginator(activities, count_per_page)
@@ -31,8 +35,14 @@ def metabolite_detail(request, id):
     activities_page_count = paginator.num_pages
     activities_start_number = (int(activities_page_number) - 1) * count_per_page
 
-    # Passage des paramètres de tri à get_plants_with_parts
-    plants = metabolite.get_plants_with_parts(sort_field=sort_field, sort_direction=sort_direction)
+    # Récupérer les plantes avec filtrage par nom directement dans la requête SQL
+    plants = metabolite.get_plants_with_parts(
+        sort_field=sort_field, 
+        sort_direction=sort_direction,
+        search_text=search_text,
+        search_type=search_type
+    )
+    
     paginator = Paginator(plants, count_per_page)
     plants_page_number = request.GET.get('plants_page', 1)
     plants = paginator.get_page(plants_page_number)
@@ -50,6 +60,8 @@ def metabolite_detail(request, id):
         'plants_page_count': plants_page_count,
         'plants_start_number': plants_start_number,
         'activities_start_number': activities_start_number,
+        'search_text': search_text,
+        'search_type': search_type,
     }
 
     return render(request, 'metabolites/metabolite_detail.html', context)
@@ -305,8 +317,11 @@ def all_activities(request):
 @login_required
 def activity_detail(request, activity_id):
     activity = get_object_or_404(Activity, id=activity_id)
-    sort = request.GET.get('plants_sort', 'name_asc')  
-    search = request.GET.get('search', '')  
+    
+    # Récupération des paramètres de tri, recherche et type de recherche
+    sort = request.GET.get('plants_sort', 'concentration_desc')
+    search = request.GET.get('search', '')
+    search_type = request.GET.get('search_type', 'contains')
 
     count_per_page = 20
     
@@ -349,7 +364,8 @@ def activity_detail(request, activity_id):
         page=concentration_page,
         per_page=count_per_page,
         sort_params=sort_params,
-        search=search
+        search=search,
+        search_type=search_type
     )
     
     # Paramètres pour la pagination
@@ -369,6 +385,8 @@ def activity_detail(request, activity_id):
         'metabolite_page_count': metabolite_page_count,
         'current_sort': sort,
         'current_search': search,
+        'search_type': search_type,
+        'metabolites_page': metabolites_page,
     }
     
     return render(request, 'metabolites/activity_detail.html', context)
