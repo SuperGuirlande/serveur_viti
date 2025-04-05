@@ -235,6 +235,51 @@ def plant_detail(request, plant_id):
     if activity_filter:
         metabolite_count_by_activity = plant.get_metabolites_by_activity(activity_filter)
     
+    # Récupérer les métabolites filtrés
+    filtered_metabolites = []
+    metabolite_ids = []
+    
+    for i in range(1, 4):  # Pour les 3 filtres possibles
+        metabolite_id = request.GET.get(f'metabolite_filter_{i}')
+        if metabolite_id:
+            try:
+                metabolite = Metabolite.objects.get(pk=metabolite_id)
+                filtered_metabolites.append({
+                    'id': metabolite.id,
+                    'name': metabolite.name
+                })
+                metabolite_ids.append(metabolite.id)
+            except Metabolite.DoesNotExist:
+                pass
+    
+    # Si des métabolites filtrés sont présents, obtenir leurs concentrations pour chaque plante
+    if metabolite_ids:
+        for plant_data in common_plants['results']:
+            # Récupérer les métabolites filtrés pour cette plante
+            plant_metabolites = MetabolitePlant.objects.filter(
+                plant_name=plant_data['name'] if isinstance(plant_data, dict) else plant_data.name,
+                metabolite_id__in=metabolite_ids
+            ).select_related('metabolite')
+            
+            # Créer un dictionnaire des concentrations par métabolite
+            if isinstance(plant_data, dict):
+                plant_data['metabolite_concentrations'] = {}
+            else:
+                plant_data.metabolite_concentrations = {}
+            
+            for pm in plant_metabolites:
+                # Stocker les valeurs low et high dans un dictionnaire
+                concentration_data = {
+                    'low': pm.low,
+                    'high': pm.high
+                }
+                
+                # Si plant_data est un dictionnaire, nous devons ajouter l'attribut metabolite_concentrations
+                if isinstance(plant_data, dict):
+                    plant_data['metabolite_concentrations'][pm.metabolite_id] = concentration_data
+                else:
+                    plant_data.metabolite_concentrations[pm.metabolite_id] = concentration_data
+    
     # Récupérer le nombre total de métabolites
     count_metabolites = plant.all_metabolites_count
     
@@ -266,6 +311,7 @@ def plant_detail(request, plant_id):
         'selected_metabolite_1': metabolite_filter_1,
         'selected_metabolite_2': metabolite_filter_2,
         'selected_metabolite_3': metabolite_filter_3,
+        'filtered_metabolites': filtered_metabolites,
     }
     
     return render(request, 'metabolites/plant_detail.html', context)

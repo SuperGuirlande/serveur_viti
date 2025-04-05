@@ -301,7 +301,7 @@
             <table class="min-w-full table-auto">
                 <thead class="bg-gray-50">
                     <tr>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             <div class="flex flex-col gap-1">
                                 <span>Plante</span>
                                 <select id="sort-plant-name" class="sort-select text-xs" data-field="name" onchange="updateCommonSort(this)">
@@ -311,7 +311,7 @@
                                 </select>
                             </div>
                         </th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             <div class="flex flex-col gap-1">
                                 <span>Nombre de métabolites en commun</span>
                                 <select id="sort-common-count" class="sort-select text-xs" data-field="common_metabolites" onchange="updateCommonSort(this)">
@@ -321,7 +321,7 @@
                                 </select>
                             </div>
                         </th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             <div class="flex flex-col gap-1">
                                 <span>Pourcentage en commun</span>
                                 <select id="sort-common-percentage" class="sort-select text-xs" data-field="common_percentage" onchange="updateCommonSort(this)">
@@ -331,7 +331,7 @@
                                 </select>
                             </div>
                         </th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             <div class="flex flex-col gap-1">
                                 <span>Meta%</span>
                                 <select id="sort-meta-percentage" class="sort-select text-xs" data-field="meta_percentage_score" onchange="updateCommonSort(this)">
@@ -341,7 +341,7 @@
                                 </select>
                             </div>
                         </th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             <div class="flex flex-col gap-1">
                                 <span>MetaRacine</span>
                                 <select id="sort-meta-root" class="sort-select text-xs" data-field="meta_root_score" onchange="updateCommonSort(this)">
@@ -351,8 +351,23 @@
                                 </select>
                             </div>
                         </th>
+                        
+                        <!-- Colonnes pour les métabolites filtrés -->
+                        {% for metabolite_info in filtered_metabolites %}
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <div class="flex flex-col gap-1">
+                                <span>Concentration {{ metabolite_info.name }}</span>
+                                <select id="sort-metabolite-{{ metabolite_info.id }}" class="sort-select text-xs" data-field="metabolite_concentration_{{ metabolite_info.id }}" onchange="updateCommonSort(this)">
+                                    <option value="">Trier par</option>
+                                    <option value="asc">Plus petit</option>
+                                    <option value="desc">Plus grand</option>
+                                </select>
+                            </div>
+                        </th>
+                        {% endfor %}
+                        
                         {% if activity_filter %}
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             <div class="flex flex-col gap-1">
                                 <span>Métabolites communs avec l'activité "{{ activity_filter }}"</span>
                                 <select id="sort-activity-common" class="sort-select text-xs" data-field="common_activity_metabolites" onchange="updateCommonSort(this)">
@@ -362,7 +377,7 @@
                                 </select>
                             </div>
                         </th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             <div class="flex flex-col gap-1">
                                 <span>Total métabolites avec l'activité "{{ activity_filter }}"</span>
                                 <select id="sort-activity-total" class="sort-select text-xs" data-field="total_activity_metabolites" onchange="updateCommonSort(this)">
@@ -372,9 +387,9 @@
                                 </select>
                             </div>
                         </th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             <div class="flex flex-col gap-1">
-                                <span>Concentration</span>
+                                <span>Concentration total "{{ activity_filter }}"</span>
                                 <select id="sort-concentration" class="sort-select text-xs" data-field="total_concentration" onchange="updateCommonSort(this)">
                                     <option value="">Trier par</option>
                                     <option value="asc">Plus petit</option>
@@ -420,6 +435,19 @@
                                 {{ common_plant.meta_root_score }}
                             </span>
                         </td>
+                        {% for metabolite_info in filtered_metabolites %}
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            {% with concentration=common_plant|get_metabolite_concentration:metabolite_info.id %}
+                            {% if concentration %}
+                                <span class="pill-orange">
+                                    {{ concentration|format_concentration_range }}
+                                </span>
+                            {% else %}
+                                <span class="text-gray-400">-</span>
+                            {% endif %}
+                            {% endwith %}
+                        </td>
+                        {% endfor %}
                         {% if activity_filter %}
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             {{ common_plant.common_activity_metabolites_count }}
@@ -798,6 +826,15 @@
             background-color: #ec489920;
             color: #ec4899;
             border: 1px solid #ec489940;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.875rem;
+        }
+        
+        .pill-orange {
+            background-color: #f59e0b20;
+            color: #f59e0b;
+            border: 1px solid #f59e0b40;
             padding: 0.25rem 0.5rem;
             border-radius: 0.25rem;
             font-size: 0.875rem;
