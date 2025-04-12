@@ -1,4 +1,5 @@
 {% extends "main/base.html" %}
+{% load custom_filters %}
 
 {% block title %}
 Sélection des plantes - Base de données interactive
@@ -1046,9 +1047,11 @@ document.addEventListener('DOMContentLoaded', function() {
                                             </h4>
                                             <div class="metabolites-list">
                                                 {% if plant.common_metabolites_names %}
-                                                    {% for metabolite in plant.common_metabolites_names %}
+                                                    {% with unique_metabolites=plant.common_metabolites_names|unique %}
+                                                    {% for metabolite in unique_metabolites %}
                                                         <div class="metabolite-item">{{ metabolite }}</div>
                                                     {% endfor %}
+                                                    {% endwith %}
                                                 {% else %}
                                                     <div class="metabolite-item text-gray-500 italic">Aucun métabolite en commun</div>
                                                 {% endif %}
@@ -1061,9 +1064,11 @@ document.addEventListener('DOMContentLoaded', function() {
                                             </h4>
                                             <div class="metabolites-list">
                                                 {% if plant.complementary_metabolites_names %}
-                                                    {% for metabolite in plant.complementary_metabolites_names %}
+                                                    {% with unique_complementary=plant.complementary_metabolites_names|unique %}
+                                                    {% for metabolite in unique_complementary %}
                                                         <div class="metabolite-item">{{ metabolite }}</div>
                                                     {% endfor %}
+                                                    {% endwith %}
                                                 {% else %}
                                                     <div class="metabolite-item text-gray-500 italic">Aucun métabolite complémentaire</div>
                                                 {% endif %}

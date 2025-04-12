@@ -30,33 +30,99 @@
             </span>
             Métabolites associés
         </h2>
-        <div class="overflow-x-auto">
-            <table class="min-w-full table-auto">
+        
+        <!-- Filtre de recherche par nom de métabolite -->
+        <div class="mb-6">
+            <form method="GET" action="" class="flex flex-wrap items-end gap-4">
+                <!-- Préserver les autres paramètres d'URL -->
+                {% if request.GET.concentration_page %}<input type="hidden" name="concentration_page" value="{{ request.GET.concentration_page }}">{% endif %}
+                {% if request.GET.search %}<input type="hidden" name="search" value="{{ request.GET.search }}">{% endif %}
+                {% if request.GET.search_type %}<input type="hidden" name="search_type" value="{{ request.GET.search_type }}">{% endif %}
+                {% if request.GET.plants_sort %}<input type="hidden" name="plants_sort" value="{{ request.GET.plants_sort }}">{% endif %}
+                {% if request.GET.metabolites_sort %}<input type="hidden" name="metabolites_sort" value="{{ request.GET.metabolites_sort }}">{% endif %}
+                {% if request.GET.metabolites_direction %}<input type="hidden" name="metabolites_direction" value="{{ request.GET.metabolites_direction }}">{% endif %}
+                
+                <div class="flex flex-col">
+                    <label for="metabolite_search_text" class="block text-sm font-medium text-gray-700 mb-1">Filtrer par nom de métabolite</label>
+                    <input type="text" name="metabolite_search_text" id="metabolite_search_text" value="{{ metabolite_search_text|default:'' }}" 
+                           placeholder="Rechercher un métabolite..." 
+                           class="rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 min-w-[300px]">
+                </div>
+                
+                <div class="flex flex-col">
+                    <label for="metabolite_search_type" class="block text-sm font-medium text-gray-700 mb-1">Type de recherche</label>
+                    <select name="metabolite_search_type" id="metabolite_search_type" class="rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500">
+                        <option value="contains" {% if metabolite_search_type == 'contains' %}selected{% endif %}>Contient</option>
+                        <option value="starts_with" {% if metabolite_search_type == 'starts_with' %}selected{% endif %}>Commence par</option>
+                    </select>
+                </div>
+                
+                <div class="flex gap-2">
+                    <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors">
+                        Filtrer
+                    </button>
+                    {% if metabolite_search_text %}
+                    <a href="?{% if request.GET.concentration_page %}concentration_page={{ request.GET.concentration_page }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.search_type %}&search_type={{ request.GET.search_type }}{% endif %}{% if request.GET.plants_sort %}&plants_sort={{ request.GET.plants_sort }}{% endif %}" class="inline-flex items-center px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors">
+                        Réinitialiser
+                    </a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+        
+        <!-- Tableau des métabolites regroupés -->
+        <div class="overflow-x-auto relative">
+            <table id="metabolites-table" class="min-w-full table-auto">
                 <thead class="bg-gray-50">
                     <tr>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Métabolite</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dosage</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Référence</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <div class="flex flex-col gap-1">
+                                <span>Métabolite</span>
+                                <select class="sort-select text-xs" data-field="metabolite_name" onchange="updateMetaboliteSort(this)">
+                                    <option value="">Trier par</option>
+                                    <option value="asc">A → Z</option>
+                                    <option value="desc">Z → A</option>
+                                </select>
+                            </div>
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dosage & Références</th>
                     </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
-                    {% for metabolite in metabolites %}
-                    <tr class="hover:bg-gray-50 cursor-pointer" onclick="window.location='{% url 'metabolite_detail' metabolite.metabolite.id %}'">
+                    {% regroup metabolites by metabolite.name as metabolite_list %}
+                    {% for metabolite_group in metabolite_list %}
+                    <tr class="hover:bg-gray-50 cursor-pointer" onclick="window.location='{% url 'metabolite_detail' metabolite_group.list.0.metabolite.id %}'; return false;">
                         <td class="px-6 py-4 text-nowrap text-sm font-medium text-gray-900">
-                            {{ forloop.counter|add:start_number }}. <span class="text-green-600">{{ metabolite.metabolite.name }}</span>
+                            <span class="text-gray-600 text-xs font-light">{{ forloop.counter|add:start_number }}.</span> 
+                            <span class="text-green-600">{{ metabolite_group.grouper }}</span>
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {{ metabolite.dosage }}
-                        </td>
-                        <td class="px-6 py-4 text-sm text-green-600 hover:text-green-800 truncate max-w-md">
-                            <div class="tooltip relative">
-                                <span class="truncate block" title="{{ metabolite.reference }}">{{ metabolite.reference }}</span>
+                        <td class="px-6 py-4 text-sm text-gray-600 relative">
+                            <div class="flex items-center">
+                                <span class="mr-2">{{ metabolite_group.list.0.dosage }}</span>
+                                {% if metabolite_group.list|length > 1 %}
+                                <span class="bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded cursor-help metabolite-tooltip" 
+                                      data-metabolite-id="metabolite-{{ metabolite_group.list.0.metabolite.id }}">
+                                    +{{ metabolite_group.list|length|add:"-1" }} variantes
+                                </span>
+                                <div id="metabolite-{{ metabolite_group.list.0.metabolite.id }}" class="tooltip-content hidden absolute left-1/2 top-full mt-2 z-10 bg-white border border-gray-200 rounded-lg shadow-lg p-4 w-96 -translate-x-1/2">
+                                    <h3 class="font-semibold text-gray-700 mb-2">Variantes de "{{ metabolite_group.grouper }}"</h3>
+                                    <div class="space-y-3">
+                                        {% for item in metabolite_group.list %}
+                                        <div class="border-b border-gray-100 pb-2 last:border-0">
+                                            <div><span class="font-medium">Dosage:</span> {{ item.dosage }}</div>
+                                            <div><span class="font-medium">Référence:</span> {{ item.reference }}</div>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                                {% endif %}
                             </div>
+                            <div class="mt-1 text-xs line-clamp-1 text-green-600">{{ metabolite_group.list.0.reference }}</div>
                         </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="3" class="px-6 py-4 text-center text-gray-500 italic">Aucun métabolite enregistré</td>
+                        <td colspan="2" class="px-6 py-4 text-center text-gray-500 italic">Aucun métabolite enregistré</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -68,10 +134,10 @@
         <div class="mt-6 flex justify-center">
             <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
                 {% if metabolites.has_previous %}
-                    <a href="?metabolites_page=1{% if query_params %}&{{ query_params }}{% endif %}" class="relative inline-flex items-center px-4 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                    <a href="?metabolites_page=1{% if metabolite_search_text %}&metabolite_search_text={{ metabolite_search_text }}&metabolite_search_type={{ metabolite_search_type }}{% endif %}{% if request.GET.metabolites_sort %}&metabolites_sort={{ request.GET.metabolites_sort }}{% endif %}{% if request.GET.metabolites_direction %}&metabolites_direction={{ request.GET.metabolites_direction }}{% endif %}{% if request.GET.concentration_page %}&concentration_page={{ request.GET.concentration_page }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.search_type %}&search_type={{ request.GET.search_type }}{% endif %}{% if request.GET.plants_sort %}&plants_sort={{ request.GET.plants_sort }}{% endif %}" class="relative inline-flex items-center px-4 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
                         Première
                     </a>
-                    <a href="?metabolites_page={{ metabolites.previous_page_number }}{% if query_params %}&{{ query_params }}{% endif %}" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                    <a href="?metabolites_page={{ metabolites.previous_page_number }}{% if metabolite_search_text %}&metabolite_search_text={{ metabolite_search_text }}&metabolite_search_type={{ metabolite_search_type }}{% endif %}{% if request.GET.metabolites_sort %}&metabolites_sort={{ request.GET.metabolites_sort }}{% endif %}{% if request.GET.metabolites_direction %}&metabolites_direction={{ request.GET.metabolites_direction }}{% endif %}{% if request.GET.concentration_page %}&concentration_page={{ request.GET.concentration_page }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.search_type %}&search_type={{ request.GET.search_type }}{% endif %}{% if request.GET.plants_sort %}&plants_sort={{ request.GET.plants_sort }}{% endif %}" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
                         Précédente
                     </a>
                 {% endif %}
@@ -81,10 +147,10 @@
                 </span>
 
                 {% if metabolites.has_next %}
-                    <a href="?metabolites_page={{ metabolites.next_page_number }}{% if query_params %}&{{ query_params }}{% endif %}" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                    <a href="?metabolites_page={{ metabolites.next_page_number }}{% if metabolite_search_text %}&metabolite_search_text={{ metabolite_search_text }}&metabolite_search_type={{ metabolite_search_type }}{% endif %}{% if request.GET.metabolites_sort %}&metabolites_sort={{ request.GET.metabolites_sort }}{% endif %}{% if request.GET.metabolites_direction %}&metabolites_direction={{ request.GET.metabolites_direction }}{% endif %}{% if request.GET.concentration_page %}&concentration_page={{ request.GET.concentration_page }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.search_type %}&search_type={{ request.GET.search_type }}{% endif %}{% if request.GET.plants_sort %}&plants_sort={{ request.GET.plants_sort }}{% endif %}" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
                         Suivante
                     </a>
-                    <a href="?metabolites_page={{ metabolites.paginator.num_pages }}{% if query_params %}&{{ query_params }}{% endif %}" class="relative inline-flex items-center px-4 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                    <a href="?metabolites_page={{ metabolites.paginator.num_pages }}{% if metabolite_search_text %}&metabolite_search_text={{ metabolite_search_text }}&metabolite_search_type={{ metabolite_search_type }}{% endif %}{% if request.GET.metabolites_sort %}&metabolites_sort={{ request.GET.metabolites_sort }}{% endif %}{% if request.GET.metabolites_direction %}&metabolites_direction={{ request.GET.metabolites_direction }}{% endif %}{% if request.GET.concentration_page %}&concentration_page={{ request.GET.concentration_page }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.search_type %}&search_type={{ request.GET.search_type }}{% endif %}{% if request.GET.plants_sort %}&plants_sort={{ request.GET.plants_sort }}{% endif %}" class="relative inline-flex items-center px-4 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
                         Dernière
                     </a>
                 {% endif %}
@@ -273,4 +339,94 @@
         max-width: 400px;
     }
 </style>
+
+<script>
+    function updateMetaboliteSort(select) {
+        const field = select.dataset.field;
+        const direction = select.value;
+        
+        // Récupérer les paramètres actuels de l'URL
+        const urlParams = new URLSearchParams(window.location.search);
+        
+        // Mettre à jour les paramètres de tri
+        if (!direction) {
+            urlParams.delete('metabolites_sort');
+            urlParams.delete('metabolites_direction');
+        } else {
+            urlParams.set('metabolites_sort', field);
+            urlParams.set('metabolites_direction', direction);
+        }
+        
+        // Conserver les paramètres de recherche de métabolite
+        if (urlParams.has('metabolite_search_text')) {
+            const searchText = urlParams.get('metabolite_search_text');
+            const searchType = urlParams.get('metabolite_search_type') || 'contains';
+            urlParams.set('metabolite_search_text', searchText);
+            urlParams.set('metabolite_search_type', searchType);
+        }
+        
+        // Réinitialiser la page de métabolites
+        urlParams.delete('metabolites_page');
+        
+        // Ajouter l'ancre à l'URL
+        urlParams.set('scroll', 'metabolites-table');
+        
+        // Rediriger vers la nouvelle URL
+        window.location.href = `${window.location.pathname}?${urlParams.toString()}`;
+    }
+
+    // Gestion des tooltips pour les métabolites
+    document.addEventListener('DOMContentLoaded', function() {
+        const tooltipTriggers = document.querySelectorAll('.metabolite-tooltip');
+        
+        tooltipTriggers.forEach(trigger => {
+            const tooltipId = trigger.getAttribute('data-metabolite-id');
+            const tooltipContent = document.getElementById(tooltipId);
+            
+            if (!tooltipContent) return;
+            
+            // Empêcher le clic de propager et déclencher la navigation
+            trigger.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
+            
+            tooltipContent.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
+            
+            // Afficher au survol
+            trigger.addEventListener('mouseenter', () => {
+                tooltipContent.classList.remove('hidden');
+            });
+            
+            // Cacher quand la souris quitte
+            trigger.addEventListener('mouseleave', () => {
+                setTimeout(() => {
+                    if (!tooltipContent.matches(':hover')) {
+                        tooltipContent.classList.add('hidden');
+                    }
+                }, 100);
+            });
+            
+            // Gestion pour le survol du tooltip lui-même
+            tooltipContent.addEventListener('mouseleave', () => {
+                tooltipContent.classList.add('hidden');
+            });
+        });
+
+        // Faire défiler jusqu'au tableau si nécessaire
+        const urlParams = new URLSearchParams(window.location.search);
+        const scroll = urlParams.get('scroll');
+        
+        if (scroll) {
+            const table = document.getElementById(scroll);
+            if (table) {
+                // Ajouter un petit délai pour s'assurer que la page est complètement chargée
+                setTimeout(() => {
+                    table.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 100);
+            }
+        }
+    });
+</script>
 {% endblock %} 

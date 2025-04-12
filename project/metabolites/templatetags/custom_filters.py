@@ -60,4 +60,43 @@ def format_concentration_range(concentration_data):
     else:
         # Seulement high disponible
         high_int = int(round(float(high)))
-        return f"? → {high_int}" 
+        return f"? → {high_int}"
+
+@register.filter
+def unique(items):
+    """
+    Filtre qui élimine les doublons dans une liste.
+    
+    Args:
+        items: Une liste ou un itérable contenant potentiellement des doublons
+    
+    Returns:
+        Une liste sans doublons, préservant l'ordre original autant que possible
+    """
+    seen = set()
+    result = []
+    
+    for item in items:
+        if item not in seen:
+            seen.add(item)
+            result.append(item)
+            
+    return result
+
+@register.filter
+def safe_urlencode(value):
+    """
+    Encode une chaîne ou un dictionnaire pour une URL de manière sécurisée.
+    Conserve l'esperluette (&) pour les paramètres d'URL.
+    
+    Args:
+        value: Une chaîne ou un dictionnaire à encoder pour une URL
+    
+    Returns:
+        Une chaîne encodée pour une URL
+    """
+    if value:
+        if not value.startswith('?'):
+            return '?' + value
+        return value
+    return '' 

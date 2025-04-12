@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+{% load custom_filters %}
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>{{ plant.name }} - Métabolites en commun</title>
+    <style>
+        @page {
+            size: A4 landscape;
+            margin: 0.5cm;
+        }
+        body {
+            font-family: Helvetica, Arial, sans-serif;
+            font-size: 8pt;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        .info {
+            margin-bottom: 10px;
+            font-size: 8pt;
+        }
+        h1 {
+            font-size: 16pt;
+            color: #166534;
+            margin: 0;
+        }
+        .subtitle {
+            font-size: 9pt;
+            color: #6b7280;
+        }
+        
+        /* Styles du tableau original - optimisés pour xhtml2pdf */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        
+        th {
+            background-color: #f9fafb;
+            padding: 5px;
+            text-align: left;
+            font-size: 7pt;
+            font-weight: bold;
+            color: #6b7280;
+            text-transform: uppercase;
+            border: 1px solid #e5e7eb;
+        }
+        
+        td {
+            padding: 5px;
+            border: 1px solid #e5e7eb;
+            font-size: 8pt;
+        }
+        
+        tr:nth-child(even) {
+            background-color: #f9fafb;
+        }
+        
+        /* Styles pour les percentages et pills */
+        .blue-percentage, .pill-blue {
+            background-color: #2563eb20;
+            color: #2563eb;
+            border: 1px solid #2563eb40;
+            padding: 3px 5px;
+            border-radius: 3px;
+        }
+        
+        .green-percentage, .pill-green {
+            background-color: #16a34a20;
+            color: #16a34a;
+            border: 1px solid #16a34a40;
+            padding: 3px 5px;
+            border-radius: 3px;
+        }
+        
+        .pill-aa {
+            background-color: #6366f120;
+            color: #6366f1;
+            border: 1px solid #6366f140;
+            padding: 3px 5px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        
+        .pill-purple {
+            background-color: #8b5cf620;
+            color: #8b5cf6;
+            border: 1px solid #8b5cf640;
+            padding: 3px 5px;
+            border-radius: 3px;
+        }
+        
+        .pill-pink {
+            background-color: #ec489920;
+            color: #ec4899;
+            border: 1px solid #ec489940;
+            padding: 3px 5px;
+            border-radius: 3px;
+        }
+        
+        .pill-orange {
+            background-color: transparent;
+            color: #f59e0b;
+            border: none;
+            padding: 3px 5px;
+            border-radius: 3px;
+        }
+        
+        .text-green-600 {
+            color: #16a34a;
+        }
+        
+        .text-yellow-600 {
+            color: #ca8a04;
+        }
+        
+        .text-red-600 {
+            color: #dc2626;
+        }
+        
+        .text-gray-400, .text-gray-500 {
+            color: #9ca3af;
+        }
+        
+        .footer {
+            margin-top: 20px;
+            text-align: center;
+            font-size: 6pt;
+            color: #6b7280;
+        }
+        
+        /* Styles inline pour forcer la compatibilité avec xhtml2pdf */
+        span.inline-flex {
+            display: inline-block !important;
+            padding: 3px 5px !important;
+            border-radius: 3px !important;
+            font-weight: 600 !important;
+        }
+        
+        /* Règle globale pour s'assurer que tous les spans n'ont pas d'arrière-plan */
+        table span {
+            background-color: transparent !important;
+            border: none !important;
+        }
+        
+        /* Règle pour supprimer le formatage de liens dans le tableau */
+        table a, table td {
+            color: inherit !important;
+            text-decoration: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>{{ plant.name }}</h1>
+        <div class="subtitle">{{ plant.french_name }}</div>
+    </div>
+
+    <div class="info">
+        <div><strong>Filtres:</strong> {% if filters_description %}{{ filters_description|join:", " }}{% else %}Aucun{% endif %}</div>
+        <div><strong>Tri:</strong> {% if sorting_description %}{{ sorting_description|join:", " }}{% else %}Aucun{% endif %}</div>
+    </div>
+
+    <!-- Script pour modifier le tableau avant qu'il ne soit rendu en PDF -->
+    <script>
+    function prepareTableForPDF() {
+        // Ce script ne s'exécutera pas dans xhtml2pdf mais documente ce qui doit être fait
+        
+        // 1. Ajouter des styles directs aux éléments avec .blue-percentage ou .green-percentage
+        // 2. Remplacer flex par block ou inline-block
+        // 3. Modifier l'affichage des cellules pour qu'elles soient toutes visibles
+    }
+    </script>
+
+    <!-- Insertion du tableau HTML modifié pour être compatible avec xhtml2pdf -->
+    {{ table_html|safe }}
+    
+    <div class="footer">
+        <p>Document généré le {{ today }} - PhytoChemInteractif</p>
+    </div>
+</body>
+</html> 

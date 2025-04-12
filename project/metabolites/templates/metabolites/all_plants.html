@@ -59,7 +59,7 @@
 </section>
 
 <!-- Section du tableau -->
-<section class="w-full max-w-[850px] mx-auto py-16">
+<section class="w-full max-w-[1280px] mx-auto py-16">
     <div class="container mx-auto px-4 flex flex-col gap-4">
         <h1 class='text-4xl font-bold text-center mx-auto text-green-600 mb-4 flex items-center gap-2'>
             <span class=''>
@@ -76,44 +76,64 @@
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider text-nowrap">
                             Nom de la plante
                         </th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider text-nowrap">
-                            Nom français
-                        </th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Nombre de métabolites uniques
                         </th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Nombre de métabolites
                         </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Actions
+                        </th>
                     </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
                     {% for plant in plants %}
-                    <tr class="hover:bg-gray-50 cursor-pointer" onclick="window.location='{% url 'plant_detail' plant.id %}';">
-                        <td class="px-6 py-4 whitespace-normal text-sm text-gray-900 text-nowrap">
-                            <span class="text-xs text-gray-500">
-                                {{ forloop.counter|add:start_number }}. 
-                            </span>
-                            <span class='text-green-700 font-semibold'>
-                                {{ plant.name }}
-                            </span>
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-2 whitespace-normal text-sm text-gray-900 text-nowrap">
+                            <a href="{% url 'plant_detail' plant.id %}" class="hover:text-green-700 hover:underline cursor-pointer">
+                                <div class="flex flex-col gap-1">
+                                    <div>
+                                        <span class="text-xs text-gray-500">
+                                            {{ forloop.counter|add:start_number }}. 
+                                        </span>
+                                        <span class='text-green-700 font-semibold'>
+                                            {{ plant.name }}
+                                        </span>
+
+                                    </div>
+                                    <div>
+                                        {% if plant.french_name %}
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-green-800 truncate max-w-[150px]">
+                                                {{ plant.french_name }}
+                                            </span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </a>
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-nowrap truncate max-w-[150px]">
-                            {% if plant.french_name %}
-                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-green-800 truncate max-w-[150px]">
-                                    {{ plant.french_name }}
-                                </span>
-                            {% endif %}
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <td class="px-6 py-2 whitespace-nowrap text-sm text-gray-500">
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                                 {{ plant.get_unique_metabolites_count }}
                             </span>
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <td class="px-6 py-2 whitespace-nowrap text-sm text-gray-500">
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                                 {{ plant.all_metabolites_count }}
                             </span>
+                        </td>
+                        <td class="px-6 py-2 whitespace-nowrap text-sm text-gray-500">
+                            <div class="flex gap-2">
+                                <a href="{% url 'plant_metabolites' plant.id %}" class="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors text-xs flex items-center">
+                                    <i class="fas fa-flask-vial mr-1"></i> Métabolites
+                                </a>
+                                <a href="{% url 'plant_common_metabolites' plant.id %}" class="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors text-xs flex items-center">
+                                    <i class="fas fa-exchange-alt mr-1"></i> Communs
+                                </a>
+                                <a href="{% url 'amino_acid_profile' %}?plant_id={{plant.id}}&normalization=none" class="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors text-xs flex items-center">
+                                    <i class="fas fa-dna mr-1"></i> Acides Aminés
+                                </a>
+                            </div>
                         </td>
                     </tr>
                     {% endfor %}
