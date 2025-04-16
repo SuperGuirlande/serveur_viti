@@ -29,6 +29,7 @@ INSTALLED_APPS = [
     'metabolites',
     'remedes',
     'acides_amines',
+    'tabs_numbering',
 ]
 
 MIDDLEWARE = [

@@ -71,11 +71,11 @@
                 <div class="legend-title">Légende des pourcentages :</div>
                 <div class="legend-item">
                     <div class="legend-color pill-blue"></div>
-                    <span>Bleu : % des métabolites communs par rapport au total des métabolites de la plante (quand la plante a moins de métabolites que {{ plant.name }})</span>
+                    <span>Bleu : % quand la plante a moins de métabolites que {{ plant.name }}</span>
                 </div>
                 <div class="legend-item">
                     <div class="legend-color pill-green"></div>
-                    <span>Vert : % des métabolites communs par rapport au total des métabolites de la plante (quand la plante a plus de métabolites que {{ plant.name }})</span>
+                    <span>Vert : % quand la plante a plus de métabolites que {{ plant.name }}</span>
                 </div>
                 <div class="legend-item mt-2">
                     <div class="legend-color pill-aa" style="background-color: #6366f120; color: #6366f1; border: 1px solid #6366f140;"></div>
@@ -166,9 +166,71 @@
                 </form>
             </div>
             
+            <!-- Système de numérotation des plantes -->
+            <div class="bg-gray-50 p-4 rounded-lg mb-4 border border-gray-200">
+                <h3 class="text-lg font-bold mb-2 text-gray-700">Système de numérotation</h3>
+                
+                <div class="flex flex-wrap gap-3 items-center">
+                    {% if active_numbering %}
+                        <div class="text-sm bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
+                            Numérotation active: {{ active_numbering_name }}
+                        </div>
+                        
+                        <button id="reset-numbering-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm px-3 py-1 rounded transition-colors">
+                            <i class="fas fa-times mr-1"></i> Effacer
+                        </button>
+                        
+                        {% if not active_numbering_id %}
+                            <button id="save-numbering-btn" class="bg-green-600 hover:bg-green-700 text-white text-sm px-3 py-1 rounded transition-colors">
+                                <i class="fas fa-save mr-1"></i> Sauvegarder
+                            </button>
+                        {% endif %}
+                    {% else %}
+                        <button id="create-numbering-btn" class="bg-blue-600 hover:bg-blue-700 text-white text-sm px-3 py-1 rounded transition-colors">
+                            <i class="fas fa-list-ol mr-1"></i> Créer une numérotation
+                        </button>
+                    {% endif %}
+                    
+                    {% if saved_numberings %}
+                        <div class="ml-3 flex gap-2 items-center">
+                            <label for="load-numbering-select" class="text-sm text-gray-700">Numérotations sauvegardées:</label>
+                            <select id="load-numbering-select" class="text-sm rounded border-gray-300 focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                                <option value="">Choisir une numérotation...</option>
+                                {% for numbering in saved_numberings %}
+                                    <option value="{{ numbering.id }}">{{ numbering.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <button id="load-numbering-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-3 py-1 rounded transition-colors disabled:opacity-50 disabled:bg-indigo-400" disabled>
+                                <i class="fas fa-download mr-1"></i> Charger
+                            </button>
+                        </div>
+                    {% endif %}
+                </div>
+                
+                <div id="save-numbering-form" class="hidden mt-3 p-3 bg-green-50 rounded-lg border border-green-200">
+                    <div class="flex items-center gap-3">
+                        <label for="numbering-name" class="text-sm text-gray-700">Nom de la numérotation:</label>
+                        <input type="text" id="numbering-name" class="text-sm rounded border-gray-300 focus:border-green-300 focus:ring focus:ring-green-200 focus:ring-opacity-50" placeholder="ex: Classement par activité">
+                        <button id="confirm-save-btn" class="bg-green-600 hover:bg-green-700 text-white text-sm px-3 py-1 rounded transition-colors">
+                            <i class="fas fa-check mr-1"></i> Confirmer
+                        </button>
+                        <button id="cancel-save-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm px-3 py-1 rounded transition-colors">
+                            Annuler
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
             <table class="min-w-full table-auto">
                 <thead class="bg-gray-50">
                     <tr>
+                        {% if active_numbering %}
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
+                            <div class="flex flex-col gap-1">
+                                <span>N°</span>
+                            </div>
+                        </th>
+                        {% endif %}
                         <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             <div class="flex flex-col gap-1">
                                 <span>Plante</span>
@@ -281,6 +343,15 @@
                 <tbody class="bg-white divide-y divide-gray-200">
                     {% for common_plant in common_plants.results %}
                     <tr class="hover:bg-gray-50">
+                        {% if active_numbering %}
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            {% if common_plant.numbering %}
+                                <span class="px-2 py-1 bg-blue-100 text-blue-800 rounded-full">{{ common_plant.numbering }}</span>
+                            {% else %}
+                                <span class="text-gray-400">-</span>
+                            {% endif %}
+                        </td>
+                        {% endif %}
                         <td class="px-6 py-4 whitespace-nowrap">
                             <div class="flex items-center">
                                 <div class="ml-0">
@@ -383,7 +454,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="4" class="px-6 py-4 text-center text-gray-500 italic">
+                        <td colspan="{% if active_numbering %}5{% else %}4{% endif %}" class="px-6 py-4 text-center text-gray-500 italic">
                             Aucune plante avec des métabolites en commun
                         </td>
                     </tr>
@@ -423,6 +494,9 @@
     </div>
 
     <script>
+        // Définir les variables JS à partir des valeurs Django
+        const PLANT_ID = "{{ plant.id }}";
+        
         function updateCommonSort(select) {
             const field = select.dataset.field;
             const direction = select.value;
@@ -650,6 +724,488 @@
                 });
             }
         });
+
+        // Scripts pour la gestion de la numérotation
+        document.addEventListener('DOMContentLoaded', function() {
+            // Bouton de création de numérotation temporaire
+            const createNumberingBtn = document.getElementById('create-numbering-btn');
+            if (createNumberingBtn) {
+                createNumberingBtn.addEventListener('click', createTemporaryNumbering);
+            }
+            
+            // Bouton de réinitialisation de la numérotation
+            const resetNumberingBtn = document.getElementById('reset-numbering-btn');
+            if (resetNumberingBtn) {
+                resetNumberingBtn.addEventListener('click', resetNumbering);
+            }
+            
+            // Gestion de la sauvegarde
+            const saveNumberingBtn = document.getElementById('save-numbering-btn');
+            const saveNumberingForm = document.getElementById('save-numbering-form');
+            const cancelSaveBtn = document.getElementById('cancel-save-btn');
+            const confirmSaveBtn = document.getElementById('confirm-save-btn');
+            const numberingNameInput = document.getElementById('numbering-name');
+            
+            if (saveNumberingBtn) {
+                saveNumberingBtn.addEventListener('click', function() {
+                    saveNumberingForm.classList.remove('hidden');
+                });
+            }
+            
+            if (cancelSaveBtn) {
+                cancelSaveBtn.addEventListener('click', function() {
+                    saveNumberingForm.classList.add('hidden');
+                    numberingNameInput.value = '';
+                });
+            }
+            
+            if (confirmSaveBtn && numberingNameInput) {
+                confirmSaveBtn.addEventListener('click', function() {
+                    const name = numberingNameInput.value.trim();
+                    if (name) {
+                        saveNumbering(name);
+                    } else {
+                        alert('Veuillez entrer un nom pour la numérotation');
+                    }
+                });
+            }
+            
+            // Gestion du chargement d'une numérotation sauvegardée
+            const loadNumberingSelect = document.getElementById('load-numbering-select');
+            const loadNumberingBtn = document.getElementById('load-numbering-btn');
+            
+            if (loadNumberingSelect && loadNumberingBtn) {
+                loadNumberingSelect.addEventListener('change', function() {
+                    loadNumberingBtn.disabled = !this.value;
+                });
+                
+                loadNumberingBtn.addEventListener('click', function() {
+                    const numberingId = loadNumberingSelect.value;
+                    if (numberingId) {
+                        loadNumbering(numberingId);
+                    }
+                });
+            }
+        });
+        
+        function createTemporaryNumbering() {
+            // Récupérer les paramètres de filtre et de tri actuels
+            const urlParams = new URLSearchParams(window.location.search);
+            const baseUrl = window.location.href.split('?')[0];
+            
+            // Créer le message de chargement avec barre de progression
+            const loadingDiv = document.createElement('div');
+            loadingDiv.className = 'fixed top-0 left-0 w-full h-full flex items-center justify-center bg-black bg-opacity-50 z-50';
+            loadingDiv.innerHTML = `
+                <div class="bg-white p-6 rounded-lg shadow-lg max-w-md">
+                    <p class="text-lg font-bold mb-2">Numérotation en cours...</p>
+                    <p class="mb-4">Détection des pages et création de la numérotation...</p>
+                    <div class="w-full bg-gray-200 rounded-full h-2.5">
+                        <div id="progress-bar" class="bg-green-600 h-2.5 rounded-full" style="width: 0%"></div>
+                    </div>
+                    <p id="progress-text" class="mt-2 text-sm text-gray-600">Initialisation...</p>
+                </div>
+            `;
+            document.body.appendChild(loadingDiv);
+            
+            // Fonction pour mettre à jour la barre de progression
+            function updateProgress(current, total) {
+                const progressBar = document.getElementById('progress-bar');
+                const progressText = document.getElementById('progress-text');
+                const percentage = Math.round((current / total) * 100);
+                progressBar.style.width = `${percentage}%`;
+                progressText.textContent = `Page ${current} / ${total}`;
+            }
+            
+            // Tableau qui contiendra toutes les plantes numérotées
+            let allPlants = {};
+            let counter = 1;
+            
+            // Fonction récursive pour parcourir chaque page
+            function processPage(pageNum, totalPages) {
+                // Mettre à jour la progression
+                updateProgress(pageNum, totalPages);
+                console.log(`Traitement de la page ${pageNum}/${totalPages}`);
+                
+                // Construire l'URL pour cette page
+                const pageParams = new URLSearchParams(urlParams.toString());
+                pageParams.set('common_page', pageNum.toString());
+                const pageUrl = `${baseUrl}?${pageParams.toString()}`;
+                console.log(`URL de la page: ${pageUrl}`);
+                
+                // Récupérer le contenu de la page
+                fetch(pageUrl)
+                    .then(response => response.text())
+                    .then(html => {
+                        console.log(`Page ${pageNum}: HTML récupéré`);
+                        // Analyser le HTML
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(html, 'text/html');
+                        
+                        // Extraire toutes les lignes du tableau
+                        const plantRows = doc.querySelectorAll('table tbody tr');
+                        console.log(`Page ${pageNum}: ${plantRows.length} lignes trouvées`);
+                        
+                        // Pour chaque ligne, extraire l'ID de la plante
+                        plantRows.forEach(row => {
+                            const plantLink = row.querySelector('a[href*="/plant/"]');
+                            if (plantLink) {
+                                const href = plantLink.getAttribute('href');
+                                const matches = href.match(/\/plant\/(\d+)/);
+                                if (matches && matches[1]) {
+                                    const plantId = matches[1];
+                                    // Ajouter cette plante avec un numéro séquentiel
+                                    if (!(plantId in allPlants)) {
+                                        allPlants[plantId] = counter++;
+                                        console.log(`Plante ajoutée: ID=${plantId}, numéro=${allPlants[plantId]}`);
+                                    }
+                                }
+                            }
+                        });
+                        
+                        // Vérifier s'il reste des pages à traiter
+                        if (pageNum < totalPages) {
+                            // Passer à la page suivante
+                            processPage(pageNum + 1, totalPages);
+                        } else {
+                            // Toutes les pages ont été traitées, finaliser
+                            console.log(`Toutes les pages traitées. ${Object.keys(allPlants).length} plantes trouvées.`);
+                            finishNumbering();
+                        }
+                    })
+                    .catch(error => {
+                        console.error(`Erreur sur la page ${pageNum}:`, error);
+                        // Continuer avec la page suivante malgré l'erreur
+                        if (pageNum < totalPages) {
+                            processPage(pageNum + 1, totalPages);
+                        } else {
+                            finishNumbering();
+                        }
+                    });
+            }
+            
+            // Fonction pour terminer le processus et envoyer la numérotation
+            function finishNumbering() {
+                console.log("Finalisation de la numérotation");
+                
+                // Si aucune plante n'a été trouvée, afficher une erreur
+                if (Object.keys(allPlants).length === 0) {
+                    loadingDiv.remove();
+                    alert('Erreur: Aucune plante à numéroter n\'a été trouvée.');
+                    return;
+                }
+                
+                // Envoyer la numérotation au serveur
+                const data = {
+                    numbering: allPlants,
+                    plant_id: parseInt(PLANT_ID),
+                    activity: urlParams.get('activity') || '',
+                    exclude_ubiquitous: urlParams.get('exclude_ubiquitous') === 'true',
+                    search_text: urlParams.get('search_text') || '',
+                    search_type: urlParams.get('search_type') || 'contains',
+                    metabolite_filter_1: urlParams.get('metabolite_filter_1') || '',
+                    metabolite_filter_2: urlParams.get('metabolite_filter_2') || '',
+                    metabolite_filter_3: urlParams.get('metabolite_filter_3') || ''
+                };
+                
+                // Ajouter les paramètres de tri
+                for (let i = 0; i < 5; i++) {
+                    const sortField = urlParams.get(`common_sort${i}`);
+                    const sortDirection = urlParams.get(`common_direction${i}`);
+                    if (sortField && sortDirection) {
+                        data[`common_sort${i}`] = sortField;
+                        data[`common_direction${i}`] = sortDirection;
+                    }
+                }
+                
+                // Appeler l'API pour créer la numérotation
+                fetch(`{% url 'tabs_numbering:create_temp_numbering' plant.id %}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCsrfToken()
+                    },
+                    body: JSON.stringify(data)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    // Supprimer le message de chargement
+                    loadingDiv.remove();
+                    
+                    if (data.success) {
+                        // Afficher un message de succès
+                        const successDiv = document.createElement('div');
+                        successDiv.className = 'fixed top-4 right-4 bg-green-500 text-white p-4 rounded-lg shadow-lg';
+                        successDiv.textContent = `Numérotation créée pour ${data.count} plantes`;
+                        document.body.appendChild(successDiv);
+                        
+                        // Recharger la page après un court délai
+                        setTimeout(() => {
+                            successDiv.remove();
+                            window.location.reload();
+                        }, 1500);
+                    } else {
+                        alert(`Erreur: ${data.error || 'Une erreur est survenue'}`);
+                    }
+                })
+                .catch(error => {
+                    // Supprimer le message de chargement
+                    loadingDiv.remove();
+                    console.error('Erreur:', error);
+                    alert('Une erreur est survenue lors de la création de la numérotation');
+                });
+            }
+            
+            // Détecter d'abord le nombre total de pages
+            console.log("Détection du nombre de pages...");
+            
+            // On va utiliser une valeur totale trouvée dans le contexte
+            let totalPages = 1;
+            
+            // Récupérer d'abord le texte de la section de pagination
+            const paginationElement = document.querySelector('.pagination');
+            if (paginationElement) {
+                console.log("Élément de pagination trouvé:", paginationElement.innerHTML);
+            }
+            
+            // Chercher dans la pagination un texte qui indique "Page X sur Y"
+            const paginationSpan = document.querySelector('.pagination span.inline-flex');
+            if (paginationSpan) {
+                console.log("Texte de pagination trouvé:", paginationSpan.textContent);
+                const match = paginationSpan.textContent.match(/sur\s+(\d+)/);
+                if (match && match[1]) {
+                    totalPages = parseInt(match[1]);
+                    console.log(`Nombre de pages extrait du texte de pagination: ${totalPages}`);
+                }
+            }
+            
+            // Vérifier s'il y a un lien "Dernière"
+            if (totalPages === 1) {
+                const paginationLinks = document.querySelectorAll('.pagination a');
+                const lastPageLink = Array.from(paginationLinks).find(link => 
+                    link.textContent.trim() === 'Dernière' || 
+                    link.textContent.includes('Dernière')
+                );
+                
+                if (lastPageLink) {
+                    console.log("Lien 'Dernière' trouvé:", lastPageLink.outerHTML);
+                    const href = lastPageLink.getAttribute('href');
+                    if (href) {
+                        const match = href.match(/common_page=(\d+)/);
+                        if (match && match[1]) {
+                            totalPages = parseInt(match[1]);
+                            console.log(`Nombre de pages extrait du lien "Dernière": ${totalPages}`);
+                        }
+                    }
+                }
+            }
+            
+            // Chercher le lien vers la dernière page
+            if (totalPages === 1) {
+                const paginationLinks = document.querySelectorAll('.pagination a');
+                console.log(`Nombre de liens de pagination trouvés: ${paginationLinks.length}`);
+                
+                // Parcourir tous les liens et trouver celui avec le plus grand numéro de page
+                paginationLinks.forEach(link => {
+                    const href = link.getAttribute('href');
+                    if (href) {
+                        const match = href.match(/common_page=(\d+)/);
+                        if (match && match[1]) {
+                            const pageNum = parseInt(match[1]);
+                            if (pageNum > totalPages) {
+                                totalPages = pageNum;
+                                console.log(`Nombre de pages mis à jour à partir du lien: ${totalPages}`);
+                            }
+                        }
+                    }
+                    
+                    // Aussi vérifier le texte du lien (pourrait être un nombre)
+                    const linkText = link.textContent.trim();
+                    if (/^\d+$/.test(linkText)) {
+                        const pageNum = parseInt(linkText);
+                        if (pageNum > totalPages) {
+                            totalPages = pageNum;
+                            console.log(`Nombre de pages mis à jour à partir du texte du lien: ${totalPages}`);
+                        }
+                    }
+                });
+            }
+            
+            // Récupérer le nombre total de plantes et calculer le nombre de pages
+            if (totalPages === 1) {
+                try {
+                    // Dans le contexte Django, le nombre total est souvent affiché quelque part
+                    // Chercher un message indiquant le nombre total de plantes
+                    const totalCountText = Array.from(document.querySelectorAll('p, div, span'))
+                        .find(el => el.textContent.match(/\btotal\b.*:\s*\d+/i) || el.textContent.match(/\d+\s*plantes/i));
+                    
+                    if (totalCountText) {
+                        console.log("Texte avec nombre total trouvé:", totalCountText.textContent);
+                        const countMatch = totalCountText.textContent.match(/(\d+)\s*plantes/i) || 
+                                          totalCountText.textContent.match(/total\b.*:\s*(\d+)/i);
+                        
+                        if (countMatch && countMatch[1]) {
+                            const totalCount = parseInt(countMatch[1]);
+                            if (totalCount > 0) {
+                                // Supposer 20 éléments par page (valeur par défaut de Django)
+                                totalPages = Math.ceil(totalCount / 20);
+                                console.log(`Nombre de pages calculé à partir du total (${totalCount} plantes): ${totalPages}`);
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error("Erreur lors de la recherche du nombre total:", e);
+                }
+            }
+            
+            // Vérifier s'il y a un texte indiquant le nombre total de plantes en commun dans le contexte
+            if (totalPages === 1) {
+                const allTextElements = document.querySelectorAll('p, div, span, h1, h2, h3, h4, h5, h6');
+                const commonPlantsText = Array.from(allTextElements).find(el => 
+                    el.textContent.includes('plantes avec métabolites en commun')
+                );
+                
+                if (commonPlantsText) {
+                    console.log("Texte plantes en commun trouvé:", commonPlantsText.textContent);
+                    const countMatch = commonPlantsText.textContent.match(/(\d+)\s*plantes/i);
+                    if (countMatch && countMatch[1]) {
+                        const totalCommonPlants = parseInt(countMatch[1]);
+                        if (totalCommonPlants > 0) {
+                            totalPages = Math.ceil(totalCommonPlants / 20);
+                            console.log(`Nombre de pages calculé à partir du total de plantes en commun (${totalCommonPlants}): ${totalPages}`);
+                        }
+                    }
+                }
+            }
+            
+            // Si rien ne fonctionne, demander directement le nombre total au serveur
+            if (totalPages === 1) {
+                // Demander spécifiquement au serveur
+                fetch(`${baseUrl}?common_page=1&count_only=true`)
+                    .then(response => response.text())
+                    .then(html => {
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(html, 'text/html');
+                        
+                        // Chercher le nombre total dans la réponse
+                        const totalElement = doc.querySelector('[data-total-count]');
+                        if (totalElement) {
+                            const totalCount = parseInt(totalElement.getAttribute('data-total-count'));
+                            if (totalCount > 0) {
+                                totalPages = Math.ceil(totalCount / 20);
+                                console.log(`Nombre total de pages récupéré du serveur: ${totalPages}`);
+                                // Commencer le traitement avec ce nombre de pages
+                                processAllPages(totalPages);
+                                return;
+                            }
+                        }
+                        
+                        // Si on n'a pas réussi, utiliser une valeur par défaut
+                        console.log("Impossible de détecter le nombre de pages, utilisation de la valeur par défaut: 77");
+                        totalPages = 77; // Vous avez mentionné 77 pages
+                        processAllPages(totalPages);
+                    })
+                    .catch(e => {
+                        console.error("Erreur lors de la requête au serveur:", e);
+                        // En cas d'erreur, utiliser la valeur par défaut
+                        console.log("Utilisation de la valeur par défaut suite à une erreur: 77");
+                        totalPages = 77;
+                        processAllPages(totalPages);
+                    });
+                
+                // Ne pas continuer immédiatement, la requête fetch est asynchrone
+                return;
+            }
+            
+            // Si on a trouvé un nombre de pages, commencer le traitement
+            console.log(`Nombre total de pages détecté: ${totalPages}`);
+            processAllPages(totalPages);
+            
+            // Fonction pour traiter toutes les pages
+            function processAllPages(totalPagesCount) {
+                updateProgress(0, totalPagesCount);
+                // Commencer le traitement des pages
+                processPage(1, totalPagesCount);
+            }
+        }
+        
+        function resetNumbering() {
+            if (!confirm('Êtes-vous sûr de vouloir effacer la numérotation actuelle ?')) {
+                return;
+            }
+            
+            // Effacer les données de numérotation en session via une requête
+            fetch(`{% url 'tabs_numbering:create_temp_numbering' plant.id %}`, {
+                method: 'DELETE',
+                headers: {
+                    'X-CSRFToken': getCsrfToken()
+                }
+            })
+            .then(response => {
+                // Recharger la page
+                window.location.reload();
+            })
+            .catch(error => {
+                console.error('Erreur:', error);
+                // Recharger quand même en cas d'erreur
+                window.location.reload();
+            });
+        }
+        
+        function saveNumbering(name) {
+            const data = {
+                plant_id: parseInt(PLANT_ID),
+                name: name
+            };
+            
+            fetch(`{% url 'tabs_numbering:save_numbering' %}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Cacher le formulaire
+                    document.getElementById('save-numbering-form').classList.add('hidden');
+                    // Recharger la page pour mettre à jour l'interface
+                    window.location.reload();
+                } else {
+                    alert(`Erreur: ${data.error || 'Une erreur est survenue'}`);
+                }
+            })
+            .catch(error => {
+                console.error('Erreur:', error);
+                alert('Une erreur est survenue lors de la sauvegarde de la numérotation');
+            });
+        }
+        
+        function loadNumbering(numberingId) {
+            fetch(`{% url 'tabs_numbering:load_numbering' 0 %}`.replace('0', numberingId))
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.redirect_url) {
+                    window.location.href = data.redirect_url;
+                } else {
+                    alert(`Erreur: ${data.error || 'Une erreur est survenue'}`);
+                }
+            })
+            .catch(error => {
+                console.error('Erreur:', error);
+                alert('Une erreur est survenue lors du chargement de la numérotation');
+            });
+        }
+        
+        function getCsrfToken() {
+            const cookieValue = document.cookie
+                .split('; ')
+                .find(row => row.startsWith('csrftoken='));
+            
+            return cookieValue ? cookieValue.split('=')[1] : null;
+        }
     </script>
 
     <style>

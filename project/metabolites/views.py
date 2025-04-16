@@ -17,6 +17,7 @@ from scipy import spatial
 from acides_amines.utils import calculate_amino_acid_similarity
 import datetime
 import re
+from tabs_numbering.models import PlantNumbering
 
 logger = logging.getLogger('metabolites')
 
@@ -316,6 +317,24 @@ def plant_common_metabolites(request, plant_id):
     metabolite_filter_1 = request.GET.get('metabolite_filter_1')
     metabolite_filter_2 = request.GET.get('metabolite_filter_2')
     metabolite_filter_3 = request.GET.get('metabolite_filter_3')
+    
+    # Vérifier s'il y a une numérotation active
+    active_numbering = request.session.get(f'plant_{plant_id}_numbering', None)
+    active_numbering_id = request.session.get(f'plant_{plant_id}_numbering_id', None)
+    active_numbering_name = request.session.get(f'plant_{plant_id}_numbering_name', None)
+    
+    # Récupérer les numérotations sauvegardées de l'utilisateur
+    saved_numberings = []
+    if request.user.is_authenticated:
+        try:
+            # Importer le modèle PlantNumbering depuis l'app tabs_numbering
+            from tabs_numbering.models import PlantNumbering
+            saved_numberings = PlantNumbering.objects.filter(
+                user=request.user, 
+                plant_id=plant_id
+            ).values('id', 'name', 'created_at')
+        except:
+            logger.warning("Impossible de charger les numérotations sauvegardées")
     
     # Construire les paramètres de tri pour les métabolites en commun
     common_sort_params = []
@@ -625,6 +644,17 @@ def plant_common_metabolites(request, plant_id):
                     reverse=reverse
                 )
     
+    # Si une numérotation est active, ajouter les numéros aux résultats
+    if active_numbering:
+        for plant_data in full_common_plants['results']:
+            plant_id_key = str(plant_data['id'] if isinstance(plant_data, dict) else plant_data.id)
+            plant_number = active_numbering.get(plant_id_key, None)
+            
+            if isinstance(plant_data, dict):
+                plant_data['numbering'] = plant_number
+            else:
+                plant_data.numbering = plant_number
+    
     # Appliquer la pagination manuellement
     start_idx = (int(common_page) - 1) * 20
     end_idx = min(start_idx + 20, len(full_common_plants['results']))
@@ -696,6 +726,11 @@ def plant_common_metabolites(request, plant_id):
         'selected_metabolite_3': metabolite_filter_3,
         'filtered_metabolites': filtered_metabolites,
         'amino_acids': amino_acids,
+        # Ajouter les infos de numérotation au contexte
+        'active_numbering': bool(active_numbering),
+        'active_numbering_id': active_numbering_id,
+        'active_numbering_name': active_numbering_name,
+        'saved_numberings': saved_numberings,
     }
     
     return render(request, 'metabolites/plant_common_metabolites.html', context)
@@ -855,7 +890,7 @@ def plant_common_metabolites_pdf(request, plant_id):
         table_html = table_html.replace(f'background:{color}', '')
         
     # Supprimer tous les background-color qui restent (approche radicale si nécessaire)
-    if "background-color:#f" in table_html.lower() or "background-color:#e" in table_html.lower() or "background-color:#d" in table_html.lower() or "background-color:red" in table_html.lower():
+    if "background-color:#f" in table_html.lower() or "background-color:#e" in table_html.lower() or "background-color:#d" in table_html.lower():
         # Supprimer tous les attributs background-color
         table_html = re.sub(r'background-color:[^;]*;?', '', table_html)
     

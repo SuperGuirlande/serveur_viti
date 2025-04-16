@@ -5,6 +5,7 @@ from django.core.cache import cache
 import logging
 from .utils import log_execution_time
 import math
+from accounts.models import CustomUser
 
 logger = logging.getLogger('metabolites')
 
@@ -797,5 +798,5 @@ class MetabolitePlant(models.Model):
             models.Index(fields=['metabolite_id']),
         ]
         unique_together = ['metabolite', 'plant_name', 'plant_part', 'low', 'high', 'reference']
-    
+
     
