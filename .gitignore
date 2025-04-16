@@ -2,6 +2,7 @@ __pycache__/
 env/
 .env
 logs/
-migrations/
+**/migrations/*
+!**/migrations/__init__.py
 static/
 db.sqlite3
