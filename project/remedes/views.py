@@ -222,14 +222,14 @@ def select_plants_for_remede(request, remede_id):
                             THEN m.name 
                             END
                             ORDER BY m.name
-                            SEPARATOR ','
+                            SEPARATOR '|||'
                         ) as common_metabolites_names,
                         GROUP_CONCAT(
                             CASE WHEN ma.activity_id = %s AND ttm.metabolite_id IS NULL 
                             THEN m.name 
                             END
                             ORDER BY m.name
-                            SEPARATOR ','
+                            SEPARATOR '|||'
                         ) as complementary_metabolites_names,
                         ROUND(
                             COUNT(DISTINCT CASE WHEN ttm.metabolite_id IS NOT NULL THEN mp.metabolite_id END) * 100.0 / 
@@ -328,8 +328,8 @@ def select_plants_for_remede(request, remede_id):
                     
                     # Traiter les listes de métabolites
                     for result in results:
-                        result['common_metabolites_names'] = result['common_metabolites_names'].split(',') if result['common_metabolites_names'] else []
-                        result['complementary_metabolites_names'] = result['complementary_metabolites_names'].split(',') if result['complementary_metabolites_names'] else []
+                        result['common_metabolites_names'] = result['common_metabolites_names'].split('|||') if result['common_metabolites_names'] else []
+                        result['complementary_metabolites_names'] = result['complementary_metabolites_names'].split('|||') if result['complementary_metabolites_names'] else []
                         
                         # Déterminer le type de pourcentage
                         target_metabolites_count = cursor.execute("""
@@ -374,10 +374,109 @@ def select_plants_for_remede(request, remede_id):
                 'complementary_metabolites_names': plant.get('complementary_metabolites_names', [])
             }
 
+    # AJOUT : Récupérer les données des plantes déjà sélectionnées qui ne sont pas visibles
+    missing_plant_ids = [pid for pid in selected_plants_ids if str(pid) not in all_plants_dict]
+    
+    if missing_plant_ids:
+        logger.info(f"Récupération des données pour {len(missing_plant_ids)} plantes sélectionnées non visibles")
+        
+        with connection.cursor() as cursor:
+            # Recréer les tables temporaires pour cette requête
+            cursor.execute("DROP TEMPORARY TABLE IF EXISTS temp_target_metabolites_missing")
+            cursor.execute("""
+                CREATE TEMPORARY TABLE temp_target_metabolites_missing AS
+                SELECT DISTINCT mp.metabolite_id
+                FROM metabolites_metaboliteplant mp
+                JOIN metabolites_metabolite m ON m.id = mp.metabolite_id
+                WHERE mp.plant_name = %s
+                AND (%s = FALSE OR m.is_ubiquitous = FALSE)
+            """, [remede.target_plant.name, exclude_ubiquitous])
+            cursor.execute("CREATE INDEX idx_temp_target_metabolites_missing ON temp_target_metabolites_missing(metabolite_id)")
+            
+            # Requête pour récupérer les données des plantes manquantes pour chaque activité
+            for activity in remede.activities.all():
+                missing_query = """
+                    SELECT 
+                        p.id,
+                        p.name,
+                        p.french_name,
+                        COUNT(DISTINCT mp.metabolite_id) as total_metabolites_count,
+                        COUNT(DISTINCT CASE WHEN ttm.metabolite_id IS NOT NULL THEN mp.metabolite_id END) as common_metabolites_count,
+                        COUNT(DISTINCT CASE WHEN ma.activity_id = %s THEN mp.metabolite_id END) as activity_metabolites_count,
+                        COUNT(DISTINCT CASE WHEN ttm.metabolite_id IS NOT NULL AND ma.activity_id = %s THEN mp.metabolite_id END) as common_activity_metabolites_count,
+                        COALESCE(SUM(CASE 
+                            WHEN ma.activity_id = %s 
+                            THEN COALESCE(mp.high, mp.low, 0) 
+                        END), 0) as total_concentration,
+                        GROUP_CONCAT(
+                            CASE WHEN ttm.metabolite_id IS NOT NULL AND ma.activity_id = %s 
+                            THEN m.name 
+                            END
+                            ORDER BY m.name
+                            SEPARATOR '|||'
+                        ) as common_metabolites_names,
+                        GROUP_CONCAT(
+                            CASE WHEN ma.activity_id = %s AND ttm.metabolite_id IS NULL 
+                            THEN m.name 
+                            END
+                            ORDER BY m.name
+                            SEPARATOR '|||'
+                        ) as complementary_metabolites_names
+                    FROM metabolites_plant p
+                    JOIN metabolites_metaboliteplant mp ON mp.plant_name = p.name
+                    JOIN metabolites_metabolite m ON m.id = mp.metabolite_id
+                    LEFT JOIN temp_target_metabolites_missing ttm ON ttm.metabolite_id = mp.metabolite_id
+                    LEFT JOIN metabolites_metaboliteactivity ma ON ma.metabolite_id = mp.metabolite_id
+                    WHERE p.id IN %s
+                    GROUP BY p.id, p.name, p.french_name
+                """
+                
+                missing_params = [
+                    activity.id,  # Pour le premier COUNT CASE
+                    activity.id,  # Pour le deuxième COUNT CASE
+                    activity.id,  # Pour le CASE dans le SUM
+                    activity.id,  # Pour le premier GROUP_CONCAT
+                    activity.id,  # Pour le deuxième GROUP_CONCAT
+                    tuple(missing_plant_ids)  # Pour la clause WHERE IN
+                ]
+                
+                try:
+                    cursor.execute(missing_query, missing_params)
+                    columns = [col[0] for col in cursor.description]
+                    missing_results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+                    
+                    # Ajouter ces plantes à all_plants_dict
+                    for plant in missing_results:
+                        plant_id = str(plant['id'])
+                        if plant_id not in all_plants_dict:
+                            all_plants_dict[plant_id] = {
+                                'name': plant['name'],
+                                'french_name': plant['french_name'],
+                                'activities': {}
+                            }
+                        
+                        # Traiter les listes de métabolites
+                        common_metabolites_names = plant['common_metabolites_names'].split('|||') if plant['common_metabolites_names'] else []
+                        complementary_metabolites_names = plant['complementary_metabolites_names'].split('|||') if plant['complementary_metabolites_names'] else []
+                        
+                        all_plants_dict[plant_id]['activities'][activity.name] = {
+                            'concentration': plant.get('total_concentration', 0),
+                            'metabolites_count': plant.get('activity_metabolites_count', 0),
+                            'common_metabolites_names': common_metabolites_names,
+                            'complementary_metabolites_names': complementary_metabolites_names
+                        }
+                        
+                except Exception as e:
+                    logger.error(f"Erreur lors de la récupération des plantes manquantes pour l'activité {activity.name}: {str(e)}")
+            
+            # Nettoyer la table temporaire
+            cursor.execute("DROP TEMPORARY TABLE IF EXISTS temp_target_metabolites_missing")
+
     context = {
         'remede': remede,
         'plants_by_activity': plants_by_activity,
         'selected_plants_ids': selected_plants_ids,
+        'selected_plants_ids_json': json.dumps(selected_plants_ids, cls=DjangoJSONEncoder),
         'sort_params': sort_params,
         'activities_json': json.dumps([activity.name for activity in remede.activities.all()]),
         'all_plants_data_json': json.dumps(all_plants_dict, cls=DjangoJSONEncoder),
@@ -440,6 +539,7 @@ def remede_detail(request, remede_id):
                             WHEN mp_target.metabolite_id IS NOT NULL AND ma.activity_id = %s 
                             THEN m.name 
                         END
+                        SEPARATOR '|||'
                     ) as common_metabolites_names,
                     GROUP_CONCAT(DISTINCT 
                         CASE 
@@ -453,6 +553,7 @@ def remede_detail(request, remede_id):
                             )
                             THEN m.name 
                         END
+                        SEPARATOR '|||'
                     ) as complementary_metabolites_names
                 FROM metabolites_plant p
                 JOIN metabolites_metaboliteplant mp ON mp.plant_name = p.name
@@ -498,12 +599,12 @@ def remede_detail(request, remede_id):
                     
                     # Traiter les noms des métabolites
                     result['common_metabolites_names'] = (
-                        result['common_metabolites_names'].split(',')
+                        result['common_metabolites_names'].split('|||')
                         if result['common_metabolites_names']
                         else []
                     )
                     result['complementary_metabolites_names'] = (
-                        result['complementary_metabolites_names'].split(',')
+                        result['complementary_metabolites_names'].split('|||')
                         if result['complementary_metabolites_names']
                         else []
                     )

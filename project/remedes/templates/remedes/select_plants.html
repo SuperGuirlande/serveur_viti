@@ -263,6 +263,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Parse les données JSON de manière sécurisée
         let allPlantsData = {};
         let activities = [];
+        let selectedPlantsIds = [];
         
         try {
             allPlantsData = JSON.parse('{{ all_plants_data_json|escapejs }}');
@@ -276,33 +277,81 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('Erreur lors du parsing des activités:', e);
         }
 
+        try {
+            selectedPlantsIds = JSON.parse('{{ selected_plants_ids_json|escapejs }}');
+        } catch (e) {
+            console.error('Erreur lors du parsing des plantes sélectionnées:', e);
+            selectedPlantsIds = [];
+        }
+
         const checkboxes = document.querySelectorAll('.plant-checkbox');
         const plantRows = {};
         const recapSection = document.getElementById('selected-plants-recap');
 
-        // Fonction pour formater la concentration
-        function formatConcentration(concentration) {
-            if (concentration === null || concentration === undefined) {
-                return 'Non spécifiée';
-            }
-            return parseFloat(concentration).toFixed(2);
+        // Variables globales pour maintenir l'état
+        let initialSelectedPlants = [...selectedPlantsIds]; // Copie des plantes initialement sélectionnées
+        let visiblePlantChanges = new Map(); // Changements apportés aux plantes visibles
+
+        // Fonction pour obtenir l'état final de toutes les plantes sélectionnées
+        function getFinalSelectedPlants() {
+            const finalSelected = new Set(initialSelectedPlants);
+            
+            // Appliquer les changements des plantes visibles
+            visiblePlantChanges.forEach((isSelected, plantId) => {
+                if (isSelected) {
+                    finalSelected.add(plantId);
+                } else {
+                    finalSelected.delete(plantId);
+                }
+            });
+            
+            return Array.from(finalSelected);
         }
 
         // Fonction pour mettre à jour le récapitulatif
         function updateRecap() {
-            const selectedPlants = new Set();
-            
-            checkboxes.forEach(checkbox => {
-                if (checkbox.checked) {
-                    selectedPlants.add(checkbox.value);
-                }
-            });
+            // Obtenir l'état final de toutes les plantes sélectionnées
+            const allCurrentSelected = new Set(getFinalSelectedPlants());
 
             let recapHTML = '';
             
-            if (selectedPlants.size === 0) {
+            if (allCurrentSelected.size === 0) {
                 recapHTML = '<p class="text-gray-500 italic">Aucune plante sélectionnée</p>';
             } else {
+                // D'abord, créer une liste globale de toutes les plantes sélectionnées avec leurs infos
+                const allSelectedPlantsInfo = new Map();
+                
+                allCurrentSelected.forEach(plantId => {
+                    const plantIdStr = plantId.toString();
+                    // Récupérer les infos depuis allPlantsData si disponible
+                    if (allPlantsData[plantIdStr]) {
+                        allSelectedPlantsInfo.set(plantId, {
+                            name: allPlantsData[plantIdStr].name,
+                            french_name: allPlantsData[plantIdStr].french_name,
+                            activities: allPlantsData[plantIdStr].activities
+                        });
+                    } else {
+                        // Récupérer les infos depuis les éléments DOM si possible
+                        const checkbox = document.querySelector(`input[value="${plantId}"]`);
+                        if (checkbox) {
+                            const label = checkbox.closest('tr').querySelector('label');
+                            const plantName = label ? label.textContent.trim().split('\n')[0].trim() : `Plante ${plantId}`;
+                            allSelectedPlantsInfo.set(plantId, {
+                                name: plantName,
+                                french_name: null,
+                                activities: {}
+                            });
+                        } else {
+                            // Plante non visible dans les tableaux actuels
+                            allSelectedPlantsInfo.set(plantId, {
+                                name: `Plante ${plantId}`,
+                                french_name: null,
+                                activities: {}
+                            });
+                        }
+                    }
+                });
+
                 // Pour chaque activité
                 activities.forEach(activity => {
                     const activityPlants = [];
@@ -310,27 +359,35 @@ document.addEventListener('DOMContentLoaded', function() {
                     const commonMetabolites = new Map();
                     const complementaryMetabolites = new Map();
 
-                    // Récupérer les plantes sélectionnées pour cette activité
-                    selectedPlants.forEach(plantId => {
-                        const plantData = allPlantsData[plantId];
-                        console.log('Plant Data for', plantId, ':', plantData);
-                        if (plantData && plantData.activities[activity]) {
-                            activityPlants.push(plantData);
-                            totalConcentration += parseFloat(plantData.activities[activity].concentration || 0);
+                    // Récupérer TOUTES les plantes sélectionnées pour cette activité
+                    allSelectedPlantsInfo.forEach((plantInfo, plantId) => {
+                        // Toujours ajouter la plante à la liste, même sans données d'activité
+                        activityPlants.push({
+                            id: plantId,
+                            name: plantInfo.name,
+                            french_name: plantInfo.french_name
+                        });
+                        
+                        // Ajouter les données d'activité si disponibles
+                        if (plantInfo.activities && plantInfo.activities[activity]) {
+                            const activityData = plantInfo.activities[activity];
+                            totalConcentration += parseFloat(activityData.concentration || 0);
 
                             // Compter les métabolites communs
-                            const activityData = plantData.activities[activity];
-                            console.log('Activity Data for', activity, ':', activityData);
                             if (activityData.common_metabolites_names && activityData.common_metabolites_names.length > 0) {
                                 activityData.common_metabolites_names.forEach(metabolite => {
-                                    commonMetabolites.set(metabolite, (commonMetabolites.get(metabolite) || 0) + 1);
+                                    if (metabolite && metabolite.trim()) { // Éviter les chaînes vides
+                                        commonMetabolites.set(metabolite, (commonMetabolites.get(metabolite) || 0) + 1);
+                                    }
                                 });
                             }
 
                             // Compter les métabolites complémentaires
                             if (activityData.complementary_metabolites_names && activityData.complementary_metabolites_names.length > 0) {
                                 activityData.complementary_metabolites_names.forEach(metabolite => {
-                                    complementaryMetabolites.set(metabolite, (complementaryMetabolites.get(metabolite) || 0) + 1);
+                                    if (metabolite && metabolite.trim()) { // Éviter les chaînes vides
+                                        complementaryMetabolites.set(metabolite, (complementaryMetabolites.get(metabolite) || 0) + 1);
+                                    }
                                 });
                             }
                         }
@@ -349,8 +406,14 @@ document.addEventListener('DOMContentLoaded', function() {
                                     <h4 class="text-sm font-semibold text-gray-700 mb-2">Plantes sélectionnées :</h4>
                                     <div class="flex flex-wrap gap-2">
                                         ${activityPlants.map(plant => `
-                                            <span class="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm">
-                                                ${plant.name}
+                                            <span class="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm flex items-center gap-2">
+                                                ${plant.name}${plant.french_name ? ` (${plant.french_name})` : ''}
+                                                <button type="button" 
+                                                        class="remove-plant-btn ml-1 text-red-500 hover:text-red-700 font-bold text-xs transition-colors duration-200"
+                                                        data-plant-id="${plant.id}"
+                                                        title="Retirer cette plante">
+                                                    <i class="fa-solid fa-times"></i>
+                                                </button>
                                             </span>
                                         `).join('')}
                                     </div>
@@ -366,25 +429,37 @@ document.addEventListener('DOMContentLoaded', function() {
 
                                 <!-- Métabolites communs -->
                                 <div class="mb-4">
-                                    <h4 class="text-sm font-semibold text-gray-700 mb-2">Métabolites communs avec la plante cible :</h4>
+                                    <h4 class="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                                        <i class="fa-solid fa-link text-blue-500"></i>
+                                        Métabolites communs avec la plante cible :
+                                    </h4>
                                     <div class="flex flex-wrap gap-2">
-                                        ${Array.from(commonMetabolites.entries()).map(([metabolite, count]) => `
-                                            <span class="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm">
-                                                ${metabolite} (${count})
-                                            </span>
-                                        `).join('')}
+                                        ${commonMetabolites.size > 0 ? 
+                                            Array.from(commonMetabolites.entries()).map(([metabolite, count]) => `
+                                                <span class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">
+                                                    ${metabolite} (${count})
+                                                </span>
+                                            `).join('') : 
+                                            '<span class="text-gray-500 italic">Aucun métabolite en commun</span>'
+                                        }
                                     </div>
                                 </div>
 
                                 <!-- Métabolites complémentaires -->
                                 <div class="mb-4">
-                                    <h4 class="text-sm font-semibold text-gray-700 mb-2">Métabolites complémentaires :</h4>
+                                    <h4 class="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                                        <i class="fa-solid fa-plus text-green-500"></i>
+                                        Métabolites complémentaires :
+                                    </h4>
                                     <div class="flex flex-wrap gap-2">
-                                        ${Array.from(complementaryMetabolites.entries()).map(([metabolite, count]) => `
-                                            <span class="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm">
-                                                ${metabolite} (${count})
-                                            </span>
-                                        `).join('')}
+                                        ${complementaryMetabolites.size > 0 ? 
+                                            Array.from(complementaryMetabolites.entries()).map(([metabolite, count]) => `
+                                                <span class="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm">
+                                                    ${metabolite} (${count})
+                                                </span>
+                                            `).join('') : 
+                                            '<span class="text-gray-500 italic">Aucun métabolite complémentaire</span>'
+                                        }
                                     </div>
                                 </div>
                             </div>
@@ -394,27 +469,59 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             recapSection.innerHTML = recapHTML;
+            
+            // Ajouter les event listeners pour les boutons de suppression
+            document.querySelectorAll('.remove-plant-btn').forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    const plantId = parseInt(this.getAttribute('data-plant-id'));
+                    
+                    // Marquer cette plante comme non sélectionnée
+                    visiblePlantChanges.set(plantId, false);
+                    
+                    // Décocher toutes les cases à cocher pour cette plante si elle est visible
+                    if (plantRows[plantId]) {
+                        plantRows[plantId].forEach(row => {
+                            const checkbox = row.querySelector('.plant-checkbox');
+                            if (checkbox) {
+                                checkbox.checked = false;
+                                // Déclencher l'événement change pour synchroniser
+                                checkbox.dispatchEvent(new Event('change'));
+                            }
+                        });
+                    }
+                    
+                    // Mettre à jour le récapitulatif
+                    updateRecap();
+                });
+            });
         }
 
         // Initialiser le mapping des lignes
         checkboxes.forEach(checkbox => {
-            const plantId = checkbox.value;
+            const plantId = parseInt(checkbox.value);
             if (!plantRows[plantId]) {
                 plantRows[plantId] = [];
             }
             plantRows[plantId].push(checkbox.closest('tr'));
         });
 
-        // Gérer les plantes déjà sélectionnées au chargement
+        // Cocher les cases des plantes déjà sélectionnées
         checkboxes.forEach(checkbox => {
-            if (checkbox.checked) {
-                const plantId = checkbox.value;
+            const plantId = parseInt(checkbox.value);
+            if (selectedPlantsIds.includes(plantId)) {
+                checkbox.checked = true;
+            }
+        });
+
+        // Gérer les plantes déjà sélectionnées au chargement
+        selectedPlantsIds.forEach(plantId => {
+            if (plantRows[plantId]) {
                 // Marquer les autres occurrences de la même plante comme sélectionnées ailleurs
                 plantRows[plantId].forEach(row => {
-                    if (row.querySelector('.plant-checkbox') !== checkbox) {
-                        row.classList.add('selected-elsewhere');
-                        // Ne pas désactiver la case à cocher pour permettre de la décocher
-                    }
+                    row.classList.add('selected-elsewhere');
                 });
             }
         });
@@ -422,24 +529,29 @@ document.addEventListener('DOMContentLoaded', function() {
         // Ajouter les écouteurs d'événements pour les changements
         checkboxes.forEach(checkbox => {
             checkbox.addEventListener('change', function() {
-                const plantId = this.value;
+                const plantId = parseInt(this.value);
                 const isChecked = this.checked;
                 
+                // Enregistrer ce changement pour les plantes visibles
+                visiblePlantChanges.set(plantId, isChecked);
+                
                 // Mettre à jour toutes les cases à cocher pour cette plante
-                plantRows[plantId].forEach(row => {
-                    const otherCheckbox = row.querySelector('.plant-checkbox');
-                    // Synchroniser l'état de toutes les cases à cocher pour cette plante
-                    if (otherCheckbox !== this) {
-                        otherCheckbox.checked = isChecked;
-                    }
-                    
-                    // Mettre à jour la classe CSS
-                    if (isChecked) {
-                        row.classList.add('selected-elsewhere');
-                    } else {
-                        row.classList.remove('selected-elsewhere');
-                    }
-                });
+                if (plantRows[plantId]) {
+                    plantRows[plantId].forEach(row => {
+                        const otherCheckbox = row.querySelector('.plant-checkbox');
+                        // Synchroniser l'état de toutes les cases à cocher pour cette plante
+                        if (otherCheckbox !== this) {
+                            otherCheckbox.checked = isChecked;
+                        }
+                        
+                        // Mettre à jour la classe CSS
+                        if (isChecked) {
+                            row.classList.add('selected-elsewhere');
+                        } else {
+                            row.classList.remove('selected-elsewhere');
+                        }
+                    });
+                }
                 
                 // Mettre à jour le récapitulatif
                 updateRecap();
@@ -596,6 +708,35 @@ document.addEventListener('DOMContentLoaded', function() {
                     });
             }
         }
+
+        // Mettre à jour les champs cachés des métabolites avant la soumission du formulaire
+        const plantsForm = document.getElementById('plants-form');
+        if (plantsForm) {
+            plantsForm.addEventListener('submit', function() {
+                // Supprimer les anciens champs cachés pour les plantes
+                const oldPlantFields = plantsForm.querySelectorAll('input[name="selected_plants"][type="hidden"]');
+                oldPlantFields.forEach(field => field.remove());
+                
+                // Ajouter des champs cachés pour TOUTES les plantes sélectionnées (état final)
+                const finalSelectedPlants = getFinalSelectedPlants();
+                finalSelectedPlants.forEach(plantId => {
+                    const hiddenInput = document.createElement('input');
+                    hiddenInput.type = 'hidden';
+                    hiddenInput.name = 'selected_plants';
+                    hiddenInput.value = plantId;
+                    plantsForm.appendChild(hiddenInput);
+                });
+                
+                // Mettre à jour les champs cachés des métabolites
+                for (let i = 1; i <= 3; i++) {
+                    const select = document.getElementById(`metabolite${i}`);
+                    const hiddenInput = document.getElementById(`hidden_metabolite${i}`);
+                    if (select && hiddenInput) {
+                        hiddenInput.value = select.value;
+                    }
+                }
+            });
+        }
     } catch (error) {
         console.error('Erreur lors de l\'initialisation:', error);
     }
@@ -657,20 +798,6 @@ document.addEventListener('DOMContentLoaded', function() {
         
         excludeUbiquitous.addEventListener('change', function() {
             excludeUbiquitousSort.checked = this.checked;
-        });
-    }
-
-    // Mettre à jour les champs cachés des métabolites avant la soumission du formulaire
-    const plantsForm = document.getElementById('plants-form');
-    if (plantsForm) {
-        plantsForm.addEventListener('submit', function() {
-            for (let i = 1; i <= 3; i++) {
-                const select = document.getElementById(`metabolite${i}`);
-                const hiddenInput = document.getElementById(`hidden_metabolite${i}`);
-                if (select && hiddenInput) {
-                    hiddenInput.value = select.value;
-                }
-            }
         });
     }
 });
