@@ -80,19 +80,30 @@ def select_plants_for_remede(request, remede_id):
     metabolites = Metabolite.objects.values('id', 'name').order_by('name').all()
     logger.info(f"Nombre total de métabolites chargés : {metabolites.count()}")
     
-    # Récupérer les métabolites sélectionnés
-    selected_metabolites = []
+    # OPTIMISATION 1 : Éliminer la requête N+1 pour les métabolites sélectionnés
+    # Collecter tous les IDs de métabolites d'abord
+    metabolite_ids = []
     for i in range(1, 4):
         metabolite_id = request.GET.get(f'metabolite{i}')
         if not metabolite_id and remede.sort_params:
             metabolite_id = remede.sort_params.get(f'metabolite{i}')
         if metabolite_id:
             try:
-                metabolite = Metabolite.objects.get(id=metabolite_id)
-                selected_metabolites.append(metabolite)
-                logger.info(f"Métabolite {i} sélectionné: {metabolite.name}")
-            except Metabolite.DoesNotExist:
-                logger.warning(f"Métabolite {i} non trouvé: {metabolite_id}")
+                metabolite_ids.append(int(metabolite_id))
+            except (ValueError, TypeError):
+                logger.warning(f"Métabolite {i} ID invalide: {metabolite_id}")
+    
+    # Récupérer tous les métabolites sélectionnés en une seule requête
+    selected_metabolites = []
+    if metabolite_ids:
+        selected_metabolites_dict = {m.id: m for m in Metabolite.objects.filter(id__in=metabolite_ids)}
+        # Maintenir l'ordre original
+        for metabolite_id in metabolite_ids:
+            if metabolite_id in selected_metabolites_dict:
+                selected_metabolites.append(selected_metabolites_dict[metabolite_id])
+                logger.info(f"Métabolite sélectionné: {selected_metabolites_dict[metabolite_id].name}")
+            else:
+                logger.warning(f"Métabolite non trouvé: {metabolite_id}")
     
     if request.method == 'POST':
         # Récupérer les plantes sélectionnées depuis le formulaire
@@ -166,9 +177,13 @@ def select_plants_for_remede(request, remede_id):
     selected_plants_ids = list(remede.plants.values_list('id', flat=True))
     plants_by_activity = {}
     
-    # Clé de cache unique pour chaque combinaison de paramètres
-    cache_key = f'remede_plants_{remede_id}_{remede.target_plant.name}_{json.dumps(sort_params)}_{exclude_ubiquitous}_{json.dumps([m.id for m in selected_metabolites])}'
-    logger.debug(f"Clé de cache: {cache_key}")
+    # OPTIMISATION 3 : Clé de cache optimisée et stable
+    import hashlib
+    # Créer un hash stable des paramètres pour éviter les clés trop longues
+    params_str = f"{sort_params}_{exclude_ubiquitous}_{[m.id for m in selected_metabolites]}"
+    params_hash = hashlib.md5(params_str.encode()).hexdigest()[:8]
+    cache_key = f'remede_plants_{remede_id}_{remede.target_plant.id}_{params_hash}'
+    logger.debug(f"Clé de cache optimisée: {cache_key}")
     
     plants_by_activity = cache.get(cache_key)
     
