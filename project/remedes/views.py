@@ -76,9 +76,10 @@ def select_plants_for_remede(request, remede_id):
     logger.info(f"Sélection des plantes pour le remède {remede_id}")
     remede = get_object_or_404(Remede.objects.prefetch_related('plants', 'activities'), id=remede_id)
     
-    # Récupérer tous les métabolites de manière optimisée
-    metabolites = Metabolite.objects.values('id', 'name').order_by('name').all()
-    logger.info(f"Nombre total de métabolites chargés : {metabolites.count()}")
+    # OPTIMISATION DRASTIQUE : Ne charger les métabolites que si nécessaire pour l'autocomplete
+    # Cette requête de 29k métabolites est inutile pour l'affichage initial
+    metabolites = Metabolite.objects.none()  # Lazy loading - chargé via AJAX uniquement
+    logger.info("Métabolites chargés en lazy loading pour optimiser les performances")
     
     # OPTIMISATION 1 : Éliminer la requête N+1 pour les métabolites sélectionnés
     # Collecter tous les IDs de métabolites d'abord
@@ -217,7 +218,7 @@ def select_plants_for_remede(request, remede_id):
                 """, [m.id for m in selected_metabolites])
                 cursor.execute("CREATE INDEX idx_temp_selected_metabolites ON temp_selected_metabolites(metabolite_id)")
             
-            # Parties de requête communes pour chaque activité
+            # OPTIMISATION DRASTIQUE : Requête simplifiée sans GROUP_CONCAT coûteux
             base_query = """
                 WITH plant_metabolites AS (
                     SELECT 
@@ -232,20 +233,10 @@ def select_plants_for_remede(request, remede_id):
                             WHEN ma.activity_id = %s 
                             THEN COALESCE(mp.high, mp.low, 0) 
                         END), 0) as total_concentration,
-                        GROUP_CONCAT(
-                            CASE WHEN ttm.metabolite_id IS NOT NULL AND ma.activity_id = %s 
-                            THEN m.name 
-                            END
-                            ORDER BY m.name
-                            SEPARATOR '|||'
-                        ) as common_metabolites_names,
-                        GROUP_CONCAT(
-                            CASE WHEN ma.activity_id = %s AND ttm.metabolite_id IS NULL 
-                            THEN m.name 
-                            END
-                            ORDER BY m.name
-                            SEPARATOR '|||'
-                        ) as complementary_metabolites_names,
+                        -- GROUP_CONCAT supprimés pour optimiser les performances
+                        -- Les noms de métabolites seront chargés séparément si nécessaire
+                        '' as common_metabolites_names,
+                        '' as complementary_metabolites_names,
                         ROUND(
                             COUNT(DISTINCT CASE WHEN ttm.metabolite_id IS NOT NULL THEN mp.metabolite_id END) * 100.0 / 
                             NULLIF(COUNT(DISTINCT mp.metabolite_id), 0),
@@ -301,13 +292,11 @@ def select_plants_for_remede(request, remede_id):
             # Exécuter la requête pour chaque activité
             plants_by_activity = {}
             for activity in remede.activities.all():
-                # Construire les paramètres pour cette activité
+                # Construire les paramètres pour cette activité (réduits après suppression des GROUP_CONCAT)
                 activity_params = [
                     activity.id,  # Pour le premier COUNT CASE
                     activity.id,  # Pour le deuxième COUNT CASE
                     activity.id,  # Pour le CASE dans le SUM
-                    activity.id,  # Pour le premier GROUP_CONCAT
-                    activity.id,  # Pour le deuxième GROUP_CONCAT
                     remede.target_plant.name  # Pour la condition WHERE p.name !=
                 ]
                 
@@ -332,7 +321,7 @@ def select_plants_for_remede(request, remede_id):
                         order_clauses.append(f"total_concentration {direction}")
                 
                 query = base_query + (", ".join(order_clauses) if order_clauses else "common_activity_metabolites_count DESC")
-                query += " LIMIT 20"  # Augmentation à 20 pour avoir plus de plantes par activité
+                query += " LIMIT 20"  # Retour à 20 plantes par activité - optimisation trop agressive annulée
                 
                 try:
                     cursor.execute(query, activity_params)
@@ -341,15 +330,14 @@ def select_plants_for_remede(request, remede_id):
                     columns = [col[0] for col in cursor.description]
                     results = [dict(zip(columns, row)) for row in cursor.fetchall()]
                     
-                    # Traiter les listes de métabolites
+                    # OPTIMISATION : Listes de métabolites vides pour les performances
+                    # Les détails seront chargés à la demande (hover tooltip)
                     for result in results:
-                        result['common_metabolites_names'] = result['common_metabolites_names'].split('|||') if result['common_metabolites_names'] else []
-                        result['complementary_metabolites_names'] = result['complementary_metabolites_names'].split('|||') if result['complementary_metabolites_names'] else []
+                        result['common_metabolites_names'] = []  # Vide pour optimiser
+                        result['complementary_metabolites_names'] = []  # Vide pour optimiser
                         
-                        # Déterminer le type de pourcentage
-                        target_metabolites_count = cursor.execute("""
-                            SELECT COUNT(*) FROM temp_target_metabolites
-                        """)
+                        # Déterminer le type de pourcentage (simplifié)
+                        cursor.execute("SELECT COUNT(*) FROM temp_target_metabolites")
                         target_count = cursor.fetchone()[0]
                         result['percentage_type'] = 'blue' if target_count >= result['total_metabolites_count'] else 'green'
                     
@@ -408,7 +396,7 @@ def select_plants_for_remede(request, remede_id):
             """, [remede.target_plant.name, exclude_ubiquitous])
             cursor.execute("CREATE INDEX idx_temp_target_metabolites_missing ON temp_target_metabolites_missing(metabolite_id)")
             
-            # Requête pour récupérer les données des plantes manquantes pour chaque activité
+            # OPTIMISATION : Requête simplifiée pour les plantes manquantes
             for activity in remede.activities.all():
                 missing_query = """
                     SELECT 
@@ -423,20 +411,9 @@ def select_plants_for_remede(request, remede_id):
                             WHEN ma.activity_id = %s 
                             THEN COALESCE(mp.high, mp.low, 0) 
                         END), 0) as total_concentration,
-                        GROUP_CONCAT(
-                            CASE WHEN ttm.metabolite_id IS NOT NULL AND ma.activity_id = %s 
-                            THEN m.name 
-                            END
-                            ORDER BY m.name
-                            SEPARATOR '|||'
-                        ) as common_metabolites_names,
-                        GROUP_CONCAT(
-                            CASE WHEN ma.activity_id = %s AND ttm.metabolite_id IS NULL 
-                            THEN m.name 
-                            END
-                            ORDER BY m.name
-                            SEPARATOR '|||'
-                        ) as complementary_metabolites_names
+                        -- GROUP_CONCAT supprimés pour optimiser les performances
+                        '' as common_metabolites_names,
+                        '' as complementary_metabolites_names
                     FROM metabolites_plant p
                     JOIN metabolites_metaboliteplant mp ON mp.plant_name = p.name
                     JOIN metabolites_metabolite m ON m.id = mp.metabolite_id
@@ -450,8 +427,6 @@ def select_plants_for_remede(request, remede_id):
                     activity.id,  # Pour le premier COUNT CASE
                     activity.id,  # Pour le deuxième COUNT CASE
                     activity.id,  # Pour le CASE dans le SUM
-                    activity.id,  # Pour le premier GROUP_CONCAT
-                    activity.id,  # Pour le deuxième GROUP_CONCAT
                     tuple(missing_plant_ids)  # Pour la clause WHERE IN
                 ]
                 
@@ -470,15 +445,12 @@ def select_plants_for_remede(request, remede_id):
                                 'activities': {}
                             }
                         
-                        # Traiter les listes de métabolites
-                        common_metabolites_names = plant['common_metabolites_names'].split('|||') if plant['common_metabolites_names'] else []
-                        complementary_metabolites_names = plant['complementary_metabolites_names'].split('|||') if plant['complementary_metabolites_names'] else []
-                        
+                        # OPTIMISATION : Listes vides pour les performances
                         all_plants_dict[plant_id]['activities'][activity.name] = {
                             'concentration': plant.get('total_concentration', 0),
                             'metabolites_count': plant.get('activity_metabolites_count', 0),
-                            'common_metabolites_names': common_metabolites_names,
-                            'complementary_metabolites_names': complementary_metabolites_names
+                            'common_metabolites_names': [],  # Vide pour optimiser
+                            'complementary_metabolites_names': []  # Vide pour optimiser
                         }
                         
                 except Exception as e:

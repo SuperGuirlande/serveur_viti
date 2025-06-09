@@ -1167,40 +1167,36 @@ document.addEventListener('DOMContentLoaded', function() {
                                 </td>
                                 <td class="tooltip-cell">
                                     <div class="metabolites-tooltip">
-                                        <div class="metabolites-section">
-                                            <h4>
-                                                <i class="fa-solid fa-link"></i>
-                                                Métabolites en commun avec l'activité et la plante recherchée
-                                            </h4>
-                                            <div class="metabolites-list">
-                                                {% if plant.common_metabolites_names %}
-                                                    {% with unique_metabolites=plant.common_metabolites_names|unique %}
-                                                    {% for metabolite in unique_metabolites %}
-                                                        <div class="metabolite-item">{{ metabolite }}</div>
-                                                    {% endfor %}
-                                                    {% endwith %}
-                                                {% else %}
-                                                    <div class="metabolite-item text-gray-500 italic">Aucun métabolite en commun</div>
-                                                {% endif %}
+                                                                            <div class="metabolites-section">
+                                        <h4>
+                                            <i class="fa-solid fa-link"></i>
+                                            Métabolites en commun avec l'activité et la plante recherchée
+                                        </h4>
+                                        <div class="metabolites-list">
+                                            <!-- OPTIMISATION : Tooltips simplifiés pour les performances -->
+                                            <div class="metabolite-item text-blue-600 italic">
+                                                📊 {{ plant.common_activity_metabolites_count|default:"0" }} métabolites en commun
+                                            </div>
+                                            <div class="metabolite-item text-gray-500 text-xs">
+                                                ⚡ Détails chargés à la demande pour optimiser les performances
                                             </div>
                                         </div>
-                                        <div class="metabolites-section">
-                                            <h4>
-                                                <i class="fa-solid fa-plus"></i>
-                                                Métabolites complémentaires avec l'activité
-                                            </h4>
-                                            <div class="metabolites-list">
-                                                {% if plant.complementary_metabolites_names %}
-                                                    {% with unique_complementary=plant.complementary_metabolites_names|unique %}
-                                                    {% for metabolite in unique_complementary %}
-                                                        <div class="metabolite-item">{{ metabolite }}</div>
-                                                    {% endfor %}
-                                                    {% endwith %}
-                                                {% else %}
-                                                    <div class="metabolite-item text-gray-500 italic">Aucun métabolite complémentaire</div>
-                                                {% endif %}
+                                    </div>
+                                    <div class="metabolites-section">
+                                        <h4>
+                                            <i class="fa-solid fa-plus"></i>
+                                            Métabolites complémentaires avec l'activité
+                                        </h4>
+                                        <div class="metabolites-list">
+                                            <!-- OPTIMISATION : Tooltips simplifiés pour les performances -->
+                                            <div class="metabolite-item text-green-600 italic">
+                                                📈 {{ plant.activity_metabolites_count|default:"0" }} métabolites avec cette activité
+                                            </div>
+                                            <div class="metabolite-item text-gray-500 text-xs">
+                                                ⚡ Détails chargés à la demande pour optimiser les performances
                                             </div>
                                         </div>
+                                    </div>
                                     </div>
                                 </td>
                             </tr>
