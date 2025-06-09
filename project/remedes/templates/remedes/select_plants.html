@@ -302,7 +302,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     finalSelected.add(plantId);
                 } else {
                     finalSelected.delete(plantId);
-                }
+            }
             });
             
             return Array.from(finalSelected);
@@ -377,7 +377,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             if (activityData.common_metabolites_names && activityData.common_metabolites_names.length > 0) {
                                 activityData.common_metabolites_names.forEach(metabolite => {
                                     if (metabolite && metabolite.trim()) { // Éviter les chaînes vides
-                                        commonMetabolites.set(metabolite, (commonMetabolites.get(metabolite) || 0) + 1);
+                                    commonMetabolites.set(metabolite, (commonMetabolites.get(metabolite) || 0) + 1);
                                     }
                                 });
                             }
@@ -386,7 +386,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             if (activityData.complementary_metabolites_names && activityData.complementary_metabolites_names.length > 0) {
                                 activityData.complementary_metabolites_names.forEach(metabolite => {
                                     if (metabolite && metabolite.trim()) { // Éviter les chaînes vides
-                                        complementaryMetabolites.set(metabolite, (complementaryMetabolites.get(metabolite) || 0) + 1);
+                                    complementaryMetabolites.set(metabolite, (complementaryMetabolites.get(metabolite) || 0) + 1);
                                     }
                                 });
                             }
@@ -437,8 +437,8 @@ document.addEventListener('DOMContentLoaded', function() {
                                         ${commonMetabolites.size > 0 ? 
                                             Array.from(commonMetabolites.entries()).map(([metabolite, count]) => `
                                                 <span class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">
-                                                    ${metabolite} (${count})
-                                                </span>
+                                                ${metabolite} (${count})
+                                            </span>
                                             `).join('') : 
                                             '<span class="text-gray-500 italic">Aucun métabolite en commun</span>'
                                         }
@@ -454,9 +454,9 @@ document.addEventListener('DOMContentLoaded', function() {
                                     <div class="flex flex-wrap gap-2">
                                         ${complementaryMetabolites.size > 0 ? 
                                             Array.from(complementaryMetabolites.entries()).map(([metabolite, count]) => `
-                                                <span class="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm">
-                                                    ${metabolite} (${count})
-                                                </span>
+                                            <span class="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm">
+                                                ${metabolite} (${count})
+                                            </span>
                                             `).join('') : 
                                             '<span class="text-gray-500 italic">Aucun métabolite complémentaire</span>'
                                         }
@@ -521,7 +521,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (plantRows[plantId]) {
                 // Marquer les autres occurrences de la même plante comme sélectionnées ailleurs
                 plantRows[plantId].forEach(row => {
-                    row.classList.add('selected-elsewhere');
+                        row.classList.add('selected-elsewhere');
                 });
             }
         });
@@ -537,20 +537,20 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 // Mettre à jour toutes les cases à cocher pour cette plante
                 if (plantRows[plantId]) {
-                    plantRows[plantId].forEach(row => {
-                        const otherCheckbox = row.querySelector('.plant-checkbox');
-                        // Synchroniser l'état de toutes les cases à cocher pour cette plante
-                        if (otherCheckbox !== this) {
-                            otherCheckbox.checked = isChecked;
-                        }
-                        
-                        // Mettre à jour la classe CSS
-                        if (isChecked) {
-                            row.classList.add('selected-elsewhere');
-                        } else {
-                            row.classList.remove('selected-elsewhere');
-                        }
-                    });
+                plantRows[plantId].forEach(row => {
+                    const otherCheckbox = row.querySelector('.plant-checkbox');
+                    // Synchroniser l'état de toutes les cases à cocher pour cette plante
+                    if (otherCheckbox !== this) {
+                        otherCheckbox.checked = isChecked;
+                    }
+                    
+                    // Mettre à jour la classe CSS
+                    if (isChecked) {
+                        row.classList.add('selected-elsewhere');
+                    } else {
+                        row.classList.remove('selected-elsewhere');
+                    }
+                });
                 }
                 
                 // Mettre à jour le récapitulatif
@@ -1167,36 +1167,40 @@ document.addEventListener('DOMContentLoaded', function() {
                                 </td>
                                 <td class="tooltip-cell">
                                     <div class="metabolites-tooltip">
-                                                                            <div class="metabolites-section">
-                                        <h4>
-                                            <i class="fa-solid fa-link"></i>
-                                            Métabolites en commun avec l'activité et la plante recherchée
-                                        </h4>
-                                        <div class="metabolites-list">
-                                            <!-- OPTIMISATION : Tooltips simplifiés pour les performances -->
-                                            <div class="metabolite-item text-blue-600 italic">
-                                                📊 {{ plant.common_activity_metabolites_count|default:"0" }} métabolites en commun
-                                            </div>
-                                            <div class="metabolite-item text-gray-500 text-xs">
-                                                ⚡ Détails chargés à la demande pour optimiser les performances
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="metabolites-section">
-                                        <h4>
-                                            <i class="fa-solid fa-plus"></i>
-                                            Métabolites complémentaires avec l'activité
-                                        </h4>
-                                        <div class="metabolites-list">
-                                            <!-- OPTIMISATION : Tooltips simplifiés pour les performances -->
-                                            <div class="metabolite-item text-green-600 italic">
-                                                📈 {{ plant.activity_metabolites_count|default:"0" }} métabolites avec cette activité
-                                            </div>
-                                            <div class="metabolite-item text-gray-500 text-xs">
-                                                ⚡ Détails chargés à la demande pour optimiser les performances
+                                        <div class="metabolites-section">
+                                            <h4>
+                                                <i class="fa-solid fa-link"></i>
+                                                Métabolites en commun avec l'activité et la plante recherchée
+                                            </h4>
+                                            <div class="metabolites-list">
+                                                {% if plant.common_metabolites_names %}
+                                                    {% with unique_metabolites=plant.common_metabolites_names|unique %}
+                                                    {% for metabolite in unique_metabolites %}
+                                                        <div class="metabolite-item">{{ metabolite }}</div>
+                                                    {% endfor %}
+                                                    {% endwith %}
+                                                {% else %}
+                                                    <div class="metabolite-item text-gray-500 italic">Aucun métabolite en commun</div>
+                                                {% endif %}
                                             </div>
                                         </div>
-                                    </div>
+                                        <div class="metabolites-section">
+                                            <h4>
+                                                <i class="fa-solid fa-plus"></i>
+                                                Métabolites complémentaires avec l'activité
+                                            </h4>
+                                            <div class="metabolites-list">
+                                                {% if plant.complementary_metabolites_names %}
+                                                    {% with unique_complementary=plant.complementary_metabolites_names|unique %}
+                                                    {% for metabolite in unique_complementary %}
+                                                        <div class="metabolite-item">{{ metabolite }}</div>
+                                                    {% endfor %}
+                                                    {% endwith %}
+                                                {% else %}
+                                                    <div class="metabolite-item text-gray-500 italic">Aucun métabolite complémentaire</div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
                                     </div>
                                 </td>
                             </tr>

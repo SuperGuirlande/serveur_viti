@@ -772,9 +772,6 @@ class MetaboliteActivity(models.Model):
         indexes = [
             models.Index(fields=['metabolite_id', 'activity_id']),
             models.Index(fields=['activity_id']),
-            # OPTIMISATION 2 : Index supplémentaires pour les requêtes de select_plants
-            models.Index(fields=['activity_id', 'metabolite_id']),  # Pour optimiser les JOIN
-            models.Index(fields=['metabolite_id']),  # Pour les recherches par métabolite
         ]
 
     def __str__(self):
